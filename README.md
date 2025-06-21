@@ -125,7 +125,7 @@ Min: 10%, Max: 30%, Gusts: 40%, Low probability
 
 ## How It Works
 
-The fan speed in in breeze mode follows a smooth sine wave with occasional **gusts** and **lulls**, simulating a natural wind pattern.
+The fan speed in breeze mode follows a smooth sine wave with occasional **gusts** and **lulls**, simulating a natural wind pattern.
 
 The wind simulation combines multiple layers:
 - Base wave pattern for natural rhythm
