@@ -72,7 +72,9 @@ So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPH
 
 ```
 
-- Wiring diagram: https://www.espboards.dev/img/9zjDDWk5sl-1000.png
+- WEMOS LOLIN32 Lite Pinout:
+  - https://www.espboards.dev/img/9zjDDWk5sl-1000.png
+  - https://www.espboards.dev/esp32/lolin32/
 - Useful wiring diagram from KlausMu/esp32-fan-controller: https://raw.githubusercontent.com/wiki/KlausMu/esp32-fan-controller/images/fritzingESP32_BME280_fan.png
 
 ### Software
