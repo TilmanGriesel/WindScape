@@ -77,6 +77,13 @@ So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPH
   - https://www.espboards.dev/esp32/lolin32/
 - Useful wiring diagram from KlausMu/esp32-fan-controller: https://raw.githubusercontent.com/wiki/KlausMu/esp32-fan-controller/images/fritzingESP32_BME280_fan.png
 
+
+
+![breadboard](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img1.png?raw=true)
+
+
+![assembled](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img2.png?raw=true)
+
 ### Software
 1. Flash the ESPHome config to your ESP32
 2. Add WiFi credentials to `secrets.yaml`
