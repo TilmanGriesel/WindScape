@@ -125,43 +125,78 @@ Min: 10%, Max: 30%, Gusts: 40%, Low probability
 
 ## How It Works
 
+The fan speed in in breeze mode follows a smooth sine wave with occasional **gusts** and **lulls**, simulating a natural wind pattern.
+
 The wind simulation combines multiple layers:
 - Base wave pattern for natural rhythm
 - Random variations for unpredictability
 - Probabilistic gust and lull events
 - Smooth speed transitions
 
-The fan speed $S(t)$ at time $t$ is modeled as a combination of deterministic and stochastic components to simulate natural wind variation. The base airflow follows a sinusoidal function:
+
+### Parameters
+
+Let:
+
+* $S_{\text{min}}$: Minimum breeze speed (fractional, from `breeze_min_speed`, e.g., 0.20)
+* $S_{\text{max}}$: Maximum breeze speed (from `breeze_max_speed`, e.g., 0.60)
+* $G_{\text{max}}$: Maximum gust speed (from `gust_max_speed`, e.g., 0.80)
+* $C$: Wave cycle duration in milliseconds (from `wave_cycle_duration` × 1000)
+* $P_{\text{gust}}$: Gust probability (percentage)
+* $P_{\text{lull}}$: Lull probability (percentage)
+* $S_{\text{lull}}$: Lull speed (fractional, from `lull_speed`, e.g., 0.20)
+* $t$: Time in milliseconds (from `millis()`)
+
+### Base Wave Speed
+
+Fan speed varies sinusoidally between $S_{\text{min}}$ and $S_{\text{max}}$:
 
 $$
-S_{\text{base}}(t) = S_{\min} + \frac{S_{\max} - S_{\min}}{2} \left[1 + \sin\left(\frac{2\pi t}{T}\right)\right]
+S_{\text{base}}(t) = S_{\text{min}} + \frac{(S_{\text{max}} - S_{\text{min}})}{2} \left( 1 + \sin\left( \frac{2\pi t}{C} \right) \right)
 $$
 
-where $S_{\min}$ and $S_{\max}$ are the minimum and maximum nominal speeds (normalized to \[0,1]), and $T$ is the wave cycle duration in milliseconds. A small random perturbation $\delta \sim \mathcal{U}(-0.1, 0.1)$ is added:
+### Random Variation
+
+A small random variation $R \in [-0.10, 0.10]$ is added:
 
 $$
-S_{\text{target}}(t) = S_{\text{base}}(t) + \delta
+S_{\text{target}} = S_{\text{base}} + R
 $$
 
-With probability $p_{\text{gust}}$, a gust event overrides the target speed:
+### Gust Injection
+
+With probability $P_{\text{gust}}$, a gust may occur:
 
 $$
-S_{\text{target}}(t) = S_{\max} + (S_{\text{gust}} - S_{\max}) \cdot \mathcal{U}(0, 1)
+S_{\text{target}} = S_{\text{max}} + (G_{\text{max}} - S_{\text{max}}) \cdot U, \quad U \sim \mathcal{U}(0, 1)
 $$
 
-where $S_{\text{gust}}$ is the absolute maximum allowed speed during a gust. The final speed is clamped:
+### Lull Injection
+
+With probability $P_{\text{lull}}$, a lull may be applied for a random duration:
 
 $$
-S_{\text{clamped}}(t) = \min(\max(S_{\text{target}}(t), S_{\min}), S_{\text{gust}})
+S_{\text{target}} = S_{\text{lull}}
 $$
 
-To ensure smooth transitions, the applied fan speed $S_{\text{current}}(t)$ evolves over time using a first-order low-pass filter:
+
+### Clamping
+
+Speed is constrained within defined bounds:
 
 $$
-S_{\text{current}}(t) \leftarrow S_{\text{current}}(t - \Delta t) + \alpha \left(S_{\text{clamped}}(t) - S_{\text{current}}(t - \Delta t)\right)
+S_{\text{target}} = \min\left( \max\left( S_{\text{target}}, S_{\text{min}} \right), G_{\text{max}} \right)
 $$
 
-where $\alpha = 0.3$ is a smoothing coefficient. The resulting control signal $S_{\text{current}}(t)$ is then applied to the PWM fan output.
+### Smooth Transition
+
+Fan speed transitions smoothly toward the target:
+
+$$
+S_{\text{current}} \leftarrow S_{\text{current}} + 0.3 \cdot (S_{\text{target}} - S_{\text{current}})
+$$
+
+
 
 
 ## Troubleshooting
