@@ -133,71 +133,30 @@ The wind simulation combines multiple layers:
 - Probabilistic gust and lull events
 - Smooth speed transitions
 
+```text
+S_current = S_current + 0.3 * (
+  clamp(
+    (
+      (S_min + 0.5 * (S_max - S_min) * (1 + sin(2π * t / C)))  // base sine wave
+      + random(-0.10, 0.10)                                    // random variation
+      + (is_gust ? (G_max - S_max) * random(0, 1) : 0)         // optional gust
+      - (is_lull ? (base + variation + gust_boost - S_lull) : 0) // optional lull override
+    ),
+    S_min,
+    G_max
+  ) - S_current
+)
+```
 
-### Parameters
+### Notes
 
-Let:
-
-* $S_{\text{min}}$: Minimum breeze speed (fractional, from `breeze_min_speed`, e.g., 0.20)
-* $S_{\text{max}}$: Maximum breeze speed (from `breeze_max_speed`, e.g., 0.60)
-* $G_{\text{max}}$: Maximum gust speed (from `gust_max_speed`, e.g., 0.80)
-* $C$: Wave cycle duration in milliseconds (from `wave_cycle_duration` × 1000)
-* $P_{\text{gust}}$: Gust probability (percentage)
-* $P_{\text{lull}}$: Lull probability (percentage)
-* $S_{\text{lull}}$: Lull speed (fractional, from `lull_speed`, e.g., 0.20)
-* $t$: Time in milliseconds (from `millis()`)
-
-### Base Wave Speed
-
-Fan speed varies sinusoidally between $S_{\text{min}}$ and $S_{\text{max}}$:
-
-$$
-S_{\text{base}}(t) = S_{\text{min}} + \frac{(S_{\text{max}} - S_{\text{min}})}{2} \left( 1 + \sin\left( \frac{2\pi t}{C} \right) \right)
-$$
-
-### Random Variation
-
-A small random variation $R \in [-0.10, 0.10]$ is added:
-
-$$
-S_{\text{target}} = S_{\text{base}} + R
-$$
-
-### Gust Injection
-
-With probability $P_{\text{gust}}$, a gust may occur:
-
-$$
-S_{\text{target}} = S_{\text{max}} + (G_{\text{max}} - S_{\text{max}}) \cdot U, \quad U \sim \mathcal{U}(0, 1)
-$$
-
-### Lull Injection
-
-With probability $P_{\text{lull}}$, a lull may be applied for a random duration:
-
-$$
-S_{\text{target}} = S_{\text{lull}}
-$$
-
-
-### Clamping
-
-Speed is constrained within defined bounds:
-
-$$
-S_{\text{target}} = \min\left( \max\left( S_{\text{target}}, S_{\text{min}} \right), G_{\text{max}} \right)
-$$
-
-### Smooth Transition
-
-Fan speed transitions smoothly toward the target:
-
-$$
-S_{\text{current}} \leftarrow S_{\text{current}} + 0.3 \cdot (S_{\text{target}} - S_{\text{current}})
-$$
-
-
-
+* `S_min`, `S_max`, `G_max`, `S_lull`: Speed thresholds (fractions like 0.2 to 1.0)
+* `t`: Time in milliseconds
+* `C`: Cycle duration in ms (wave period)
+* `random(a, b)`: Returns a random float between `a` and `b`
+* `is_gust`: Boolean, true with probability `P_gust%`
+* `is_lull`: Boolean, true with probability `P_lull%`
+* `clamp(x, min, max)`: Limits `x` to the given range
 
 ## Troubleshooting
 
