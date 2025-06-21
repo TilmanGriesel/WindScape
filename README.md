@@ -81,7 +81,6 @@ So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPH
 
 ![breadboard](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img1.png?raw=true)
 
-
 ![assembled](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img2.png?raw=true)
 
 ### Software
@@ -100,6 +99,10 @@ All settings adjust live through Home Assistant:
 | **Wave Duration** | Cycle length | 5 seconds |
 | **Gust Probability** | Frequency of wind bursts | 8% |
 | **Lull Probability** | Calm moment frequency | 5% |
+
+![ha_config](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/ha1.png?raw=true)
+
+![breeze_variation](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/ha2.png?raw=true)
 
 ## Breeze Profiles
 
