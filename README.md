@@ -131,6 +131,39 @@ The wind simulation combines multiple layers:
 - Probabilistic gust and lull events
 - Smooth speed transitions
 
+The fan speed $S(t)$ at time $t$ is modeled as a combination of deterministic and stochastic components to simulate natural wind variation. The base airflow follows a sinusoidal function:
+
+$$
+S_{\text{base}}(t) = S_{\min} + \frac{S_{\max} - S_{\min}}{2} \left[1 + \sin\left(\frac{2\pi t}{T}\right)\right]
+$$
+
+where $S_{\min}$ and $S_{\max}$ are the minimum and maximum nominal speeds (normalized to \[0,1]), and $T$ is the wave cycle duration in milliseconds. A small random perturbation $\delta \sim \mathcal{U}(-0.1, 0.1)$ is added:
+
+$$
+S_{\text{target}}(t) = S_{\text{base}}(t) + \delta
+$$
+
+With probability $p_{\text{gust}}$, a gust event overrides the target speed:
+
+$$
+S_{\text{target}}(t) = S_{\max} + (S_{\text{gust}} - S_{\max}) \cdot \mathcal{U}(0, 1)
+$$
+
+where $S_{\text{gust}}$ is the absolute maximum allowed speed during a gust. The final speed is clamped:
+
+$$
+S_{\text{clamped}}(t) = \min(\max(S_{\text{target}}(t), S_{\min}), S_{\text{gust}})
+$$
+
+To ensure smooth transitions, the applied fan speed $S_{\text{current}}(t)$ evolves over time using a first-order low-pass filter:
+
+$$
+S_{\text{current}}(t) \leftarrow S_{\text{current}}(t - \Delta t) + \alpha \left(S_{\text{clamped}}(t) - S_{\text{current}}(t - \Delta t)\right)
+$$
+
+where $\alpha = 0.3$ is a smoothing coefficient. The resulting control signal $S_{\text{current}}(t)$ is then applied to the PWM fan output.
+
+
 ## Troubleshooting
 
 **Fan not responding?** Check PWM connections and 21kHz compatibility  
