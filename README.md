@@ -7,6 +7,8 @@ That said, one thing always felt missing: a natural breeze. The constant airflow
 
 So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPHome, fully integrated with Home Assistant. It randomizes fan speed to create a calming, natural airflow pattern right at my desk. I love the result. Maybe you will too. If you like this project, leaving a star would be lovely.
 
+![title](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/title.png?raw=true)
+
 ## Features
 
 **Seaside Breeze Mode** - Realistic wind patterns with:
