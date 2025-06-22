@@ -25,48 +25,48 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/plage.png?raw=true" width="100">
 
-**Feel:** Strong, steady seaside wind with playful gusts
-**Experience:** Like standing on a breezy beach where ocean winds roll in with energy. Great for a refreshing, invigorating airflow that feels alive and ever-changing.
+- **Feel:** Strong, steady seaside wind with playful gusts
+- **Experience:** Like standing on a breezy beach where ocean winds roll in with energy. Great for a refreshing, invigorating airflow that feels alive and ever-changing.
 
 #### 2. Capri (Mediterranean Island, Italy)
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/capri.png?raw=true" width="100">
 
-**Feel:** Soft and relaxed coastal breeze
-**Experience:** Gentle wind like what you’d feel while lounging on a terrace overlooking the Mediterranean. Ideal for calm afternoons, reading, or light background airflow.
+- **Feel:** Soft and relaxed coastal breeze
+- **Experience:** Gentle wind like what you’d feel while lounging on a terrace overlooking the Mediterranean. Ideal for calm afternoons, reading, or light background airflow.
 
 #### 3. Plateau de Valensole (French Countryside)
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/valensole.png?raw=true" width="100">
 
-**Feel:** Peaceful, barely-there wind
-**Experience:** Imagine a warm summer day in a quiet lavender field. The air moves softly, almost like a whisper. Perfect for unwinding or sleeping.
+- **Feel:** Peaceful, barely-there wind
+- **Experience:** Imagine a warm summer day in a quiet lavender field. The air moves softly, almost like a whisper. Perfect for unwinding or sleeping.
 
 #### 4. Fellhorn (Alpine Mountain Range)
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/alpine.png?raw=true" width="100">
 
-**Feel:** Crisp, lively mountain air with frequent gusts
-**Experience:** Like opening a window in the Alps — cool, brisk, and full of natural movement. Great for simulating fresh, outdoor mountain air indoors.
+- **Feel:** Crisp, lively mountain air with frequent gusts
+- **Experience:** Like opening a window in the Alps — cool, brisk, and full of natural movement. Great for simulating fresh, outdoor mountain air indoors.
 
 #### 5. Meseta de Somuncurá (Patagonia, Argentina)
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/patagonia.png?raw=true" width="100">
 
-**Feel:** Bold and intense wind with powerful surges
-**Experience:** Feels like you’re standing in one of the windiest places on Earth. Ideal for a dramatic atmosphere, energizing effect, or maximum airflow performance.
+- **Feel:** Bold and intense wind with powerful surges
+- **Experience:** Feels like you’re standing in one of the windiest places on Earth. Ideal for a dramatic atmosphere, energizing effect, or maximum airflow performance.
 
 #### 6. Nærøyfjord (Norwegian Fjords)
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/fjord.png?raw=true" width="100">
 
-**Feel:** Channeled, dramatic airflow with noticeable shifts
-**Experience:** Like the wind funnelling between tall cliffs, unpredictable and thrilling. Excellent for a unique, immersive airflow experience.
+- **Feel:** Channeled, dramatic airflow with noticeable shifts
+- **Experience:** Like the wind funnelling between tall cliffs, unpredictable and thrilling. Excellent for a unique, immersive airflow experience.
 
 #### 7. Manual Mode
 
-**Feel:** Whatever you choose
-**Experience:** Full control. No simulation, just direct manual speed adjustment, great for testing, automations or when you want a consistent fan output without variation.
+- **Feel:** Whatever you choose
+- **Experience:** Full control. No simulation, just direct manual speed adjustment, great for testing, automations or when you want a consistent fan output without variation.
 
 ## Quick Setup
 
