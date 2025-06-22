@@ -1,0 +1,767 @@
+substitutions:
+  device_name: "wind-scape"
+  friendly_name: "WindScape"
+  
+  # PWM Configuration - Optimized for 2000RPM PC fans
+  pwm_frequency: "25000Hz"
+  pwm_min_power: "0.12"  # Minimum duty cycle to overcome motor startup torque
+  
+  # Fan operational limits
+  fan_speed_min: "15"
+  fan_speed_max: "100"
+  fan_speed_default: "70"
+  
+  # Base timing intervals (dynamically adjusted by location presets)
+  base_update_interval: "800ms"
+  gust_update_interval: "200ms"
+  sensor_update_interval: "1s"
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+  comment: "PWM fan controller featuring simulated wind effects for more realistic airflow behavior. https://github.com/TilmanGriesel/WindScape"
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret ap_password
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: DEBUG
+  logs:
+    wind: DEBUG
+
+# ====================================================================================
+# HARDWARE CONFIGURATION
+# ====================================================================================
+
+output:
+  - platform: ledc
+    pin: GPIO14
+    id: fan_pwm_output
+    frequency: ${pwm_frequency}
+    min_power: ${pwm_min_power}
+
+fan:
+  - platform: speed
+    name: "Manual Control"
+    id: desk_fan
+    output: fan_pwm_output
+    speed_count: 100
+    restore_mode: RESTORE_DEFAULT_OFF
+    icon: "mdi:fan"
+    on_speed_set:
+      - if:
+          condition:
+            lambda: 'return id(wind_mode_select).state == "Manual";'
+          then:
+            - script.execute:
+                id: apply_fan_speed
+                speed_percent: !lambda "return x;"
+
+# ====================================================================================
+# SENSORS & MONITORING
+# ====================================================================================
+
+sensor:
+  # RPM monitoring via pulse counter (hall effect or optical sensor on GPIO27)
+  - platform: pulse_counter
+    pin:
+      number: GPIO27
+      mode:
+        input: true
+        pullup: true
+    name: "Fan RPM"
+    id: fan_rpm
+    update_interval: 2s
+    unit_of_measurement: "RPM"
+    icon: "mdi:speedometer"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.5  # Adjust based on sensor pulses per revolution
+
+  # Simulated wind speed based on physics calculations
+  - platform: template
+    name: "Wind Speed"
+    id: wind_speed_sensor
+    unit_of_measurement: "mph"
+    icon: "mdi:weather-windy"
+    accuracy_decimals: 1
+    state_class: "measurement"
+    update_interval: ${sensor_update_interval}
+
+  # Current gust intensity as percentage above base wind
+  - platform: template
+    name: "Gust Strength"
+    id: gust_strength_sensor
+    unit_of_measurement: "%"
+    icon: "mdi:weather-windy-variant"
+    accuracy_decimals: 0
+    state_class: "measurement"
+    update_interval: ${sensor_update_interval}
+
+  # ESP32 system diagnostics
+  - platform: uptime
+    name: "${friendly_name} Uptime"
+    id: uptime_sensor
+    update_interval: 60s
+
+  - platform: wifi_signal
+    name: "${friendly_name} WiFi Signal"
+    id: wifi_signal_sensor
+    update_interval: 60s
+
+  - platform: internal_temperature
+    name: "${friendly_name} CPU Temperature"
+    id: cpu_temp_sensor
+    update_interval: 30s
+
+  # Memory usage monitoring
+  - platform: template
+    name: "${friendly_name} Free Heap"
+    id: free_heap_sensor
+    unit_of_measurement: "bytes"
+    icon: "mdi:memory"
+    accuracy_decimals: 0
+    state_class: "measurement"
+    update_interval: 30s
+    lambda: |-
+      return ESP.getFreeHeap();
+
+  # Physics engine performance metrics
+  - platform: template
+    name: "Physics Loop Frequency"
+    id: physics_loop_freq
+    unit_of_measurement: "Hz"
+    icon: "mdi:sine-wave"
+    accuracy_decimals: 2
+    state_class: "measurement"
+    update_interval: 10s
+    lambda: |-
+      if (id(current_base_interval) > 0) {
+        return 1000.0f / id(current_base_interval);
+      }
+      return 0.0f;
+
+  # Current noise parameters for debugging
+  - platform: template
+    name: "Noise Time Scale"
+    id: noise_scale_sensor
+    unit_of_measurement: "scale"
+    icon: "mdi:chart-line-variant"
+    accuracy_decimals: 4
+    state_class: "measurement"
+    update_interval: 5s
+    lambda: |-
+      return id(noise_time_scale);
+
+# ====================================================================================
+# USER CONTROLS
+# ====================================================================================
+
+number:
+  # Global wind intensity multiplier
+  - platform: template
+    name: "Wind Intensity"
+    id: wind_intensity
+    min_value: 30
+    max_value: 150
+    step: 5
+    initial_value: 100
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:weather-windy-variant"
+    mode: slider
+    optimistic: true
+
+  # Frequency of gust events
+  - platform: template
+    name: "Gust Frequency"
+    id: gust_frequency
+    min_value: 10
+    max_value: 90
+    step: 5
+    initial_value: 40
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:sine-wave"
+    mode: slider
+    optimistic: true
+
+  # Maximum allowed fan speed regardless of simulation
+  - platform: template
+    name: "Fan Speed Limit"
+    id: fan_speed_limit
+    min_value: ${fan_speed_min}
+    max_value: ${fan_speed_max}
+    step: 5
+    initial_value: ${fan_speed_default}
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:speedometer-medium"
+    mode: box
+    optimistic: true
+
+  # Minimum fan speed to prevent complete stops
+  - platform: template
+    name: "Minimum Fan Speed"
+    id: minimum_fan_speed
+    min_value: 0
+    max_value: 50
+    step: 5
+    initial_value: 15
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:speedometer-slow"
+    mode: box
+    optimistic: true
+
+# Location-based wind simulation profiles
+select:
+  - platform: template
+    name: "Wind Mode"
+    id: wind_mode_select
+    icon: "mdi:weather-partly-cloudy"
+    options:
+      - "Plage du Truc Vert"
+      - "Capri"
+      - "Plateau de Valensole"
+      - "Fellhorn"
+      - "Meseta de Somuncurá"
+      - "Nærøyfjord"
+      - "Manual"
+    initial_option: "Plage du Truc Vert"
+    restore_value: true
+    optimistic: true
+    on_value:
+      - script.execute: handle_mode_change
+
+# Human-readable wind condition description
+text_sensor:
+  - platform: template
+    name: "Wind Condition"
+    id: wind_condition_sensor
+    icon: "mdi:weather-windy"
+    update_interval: ${sensor_update_interval}
+
+  # ESP32 system information
+  - platform: version
+    name: "${friendly_name} ESPHome Version"
+    
+  - platform: wifi_info
+    ip_address:
+      name: "${friendly_name} IP Address"
+    ssid:
+      name: "${friendly_name} WiFi SSID"
+    mac_address:
+      name: "${friendly_name} MAC Address"
+
+# System status monitoring
+binary_sensor:
+  - platform: status
+    name: "${friendly_name} Status"
+    id: connection_status
+
+  # Simulation state indicators
+  - platform: template
+    name: "${friendly_name} Wind Simulation Active"
+    id: simulation_active_sensor
+    icon: "mdi:weather-windy"
+    lambda: |-
+      return id(wind_simulation_active);
+
+  # Fan operational status
+  - platform: template
+    name: "${friendly_name} Fan Running"
+    id: fan_running_sensor
+    icon: "mdi:fan"
+    lambda: |-
+      return id(desk_fan).state;
+
+# ====================================================================================
+# GLOBAL STATE VARIABLES
+# ====================================================================================
+
+globals:
+  # Simulation control
+  - id: wind_simulation_active
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  
+  # Current wind parameters
+  - id: base_wind_speed
+    type: float
+    restore_value: false
+    initial_value: '5.0'
+    
+  - id: current_gust_multiplier
+    type: float
+    restore_value: false
+    initial_value: '1.0'
+    
+  - id: wind_phase_offset
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+    
+  # Physics parameters
+  - id: turbulence_factor
+    type: float
+    restore_value: false
+    initial_value: '1.0'
+    
+  - id: gust_intensity_factor
+    type: float
+    restore_value: false
+    initial_value: '1.0'
+    
+  - id: noise_time_scale
+    type: float
+    restore_value: false
+    initial_value: '0.01'
+    
+  - id: perlin_seed_offset
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+
+  # Dynamic timing intervals (milliseconds)
+  - id: current_base_interval
+    type: int
+    restore_value: false
+    initial_value: '800'
+    
+  - id: current_gust_interval
+    type: int
+    restore_value: false
+    initial_value: '200'
+
+# ====================================================================================
+# PHYSICS ENGINE & CORE ALGORITHMS
+# ====================================================================================
+
+script:
+  # Optimized 1D Perlin noise implementation for natural wind patterns
+  - id: perlin_noise_1d
+    parameters:
+      x: float
+    then:
+      - lambda: |-
+          float i = floor(x);
+          float f = x - i;
+          
+          // Pseudo-random gradient hash function
+          auto hash = [](int n) -> float {
+            n = (n << 13) ^ n;
+            return (1.0f - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0f);
+          };
+          
+          // Calculate gradients at integer lattice points
+          float g0 = hash((int)i);
+          float g1 = hash((int)i + 1);
+          
+          // Smoothstep interpolation for C2 continuity
+          float u = f * f * (3.0f - 2.0f * f);
+          
+          // Linear interpolation between gradients
+          float noise_value = g0 * (1.0f - u) + g1 * u;
+          
+          // Store result in global variable for retrieval
+          id(wind_phase_offset) = noise_value;
+
+  # Fan speed application with safety limits and intensity scaling
+  - id: apply_fan_speed
+    parameters:
+      speed_percent: float
+    then:
+      - lambda: |-
+          float requested_speed = speed_percent / 100.0f;
+          float speed_limit = id(fan_speed_limit).state / 100.0f;
+          float intensity_multiplier = id(wind_intensity).state / 100.0f;
+          float min_speed = id(minimum_fan_speed).state / 100.0f;
+          
+          // Apply global intensity modifier during simulation
+          if (id(wind_simulation_active)) {
+            requested_speed *= intensity_multiplier;
+          }
+          
+          // Enforce maximum speed limit
+          float final_speed = (requested_speed > speed_limit) ? speed_limit : requested_speed;
+          
+          // Enforce minimum speed to prevent stalling
+          if (final_speed > 0 && final_speed < min_speed) {
+            final_speed = min_speed;
+          }
+          
+          // Apply PWM output or turn off if below threshold
+          if (final_speed < 0.05f) {
+            id(fan_pwm_output).turn_off();
+          } else {
+            id(fan_pwm_output).set_level(final_speed);
+          }
+
+  # Main wind physics calculation with multi-octave Perlin noise
+  - id: calculate_wind_physics
+    then:
+      - lambda: |-
+          if (!id(wind_simulation_active)) return;
+          
+          std::string mode = id(wind_mode_select).state;
+          uint32_t now = millis();
+          float t = now / 1000.0f;
+          
+          // Default atmospheric parameters
+          float base_speed = 8.0f;
+          float turbulence = 1.0f;
+          float gust_chance = 0.4f;
+          float gust_strength = 1.5f;
+          
+          // Location-specific atmospheric modeling
+          if (mode == "Plage du Truc Vert") {
+            base_speed = 12.0f;       // Strong oceanic winds
+            turbulence = 1.8f;        // Moderate sea-state turbulence
+            gust_chance = 0.45f;      // Regular wind variations
+            gust_strength = 2.1f;     // Strong gusts from thermal gradients
+            id(noise_time_scale) = 0.018f;
+            id(current_base_interval) = 700;    // Steady oceanic rhythm
+            id(current_gust_interval) = 180;
+          } else if (mode == "Capri") {
+            base_speed = 8.5f;        // Gentle coastal breeze
+            turbulence = 1.1f;        // Low turbulence in enclosed sea
+            gust_chance = 0.45f;      // Occasional thermal activity
+            gust_strength = 1.7f;     // Moderate thermal gusts
+            id(noise_time_scale) = 0.012f;
+            id(current_base_interval) = 1200;   // Very smooth, relaxed
+            id(current_gust_interval) = 350;
+          } else if (mode == "Plateau de Valensole") {
+            base_speed = 4.0f;        // Filtered air movement
+            turbulence = 0.9f;        // Dampened by vegetation
+            gust_chance = 0.25f;      // Minimal wind variation
+            gust_strength = 1.4f;     // Gentle movement
+            id(noise_time_scale) = 0.005f;
+            id(current_base_interval) = 2000;   // Ultra slow, peaceful
+            id(current_gust_interval) = 800;
+          } else if (mode == "Fellhorn") {
+            base_speed = 11.5f;       // Mountain-enhanced winds
+            turbulence = 2.2f;        // High topographic turbulence
+            gust_chance = 0.75f;      // Frequent orographic effects
+            gust_strength = 2.3f;     // Strong valley/ridge flows
+            id(noise_time_scale) = 0.022f;
+            id(current_base_interval) = 600;    // Safer interval for stability
+            id(current_gust_interval) = 180;
+          } else if (mode == "Meseta de Somuncurá") {
+            base_speed = 16.0f;       // Legendary Patagonian winds
+            turbulence = 2.0f;        // Consistent high-speed flow
+            gust_chance = 0.90f;      // Nearly constant gusting
+            gust_strength = 2.5f;     // Powerful unobstructed gusts
+            id(noise_time_scale) = 0.030f;
+            id(current_base_interval) = 500;    // Safer interval for stability
+            id(current_gust_interval) = 150;
+          } else if (mode == "Nærøyfjord") {
+            base_speed = 13.5f;       // Channeled fjord winds
+            turbulence = 2.1f;        // Venturi effect turbulence
+            gust_chance = 0.80f;      // Dramatic pressure changes
+            gust_strength = 2.4f;     // Powerful downdrafts
+            id(noise_time_scale) = 0.025f;
+            id(current_base_interval) = 600;    // Dramatic but controlled
+            id(current_gust_interval) = 150;
+          }
+          
+          // Store parameters for gust calculations
+          id(base_wind_speed) = base_speed;
+          id(turbulence_factor) = turbulence;
+          id(gust_intensity_factor) = gust_strength;
+          
+          // Multi-octave noise with yield points to prevent watchdog timeout
+          float time_scaled = t * id(noise_time_scale);
+          
+          // Primary wind flow
+          float primary_noise = 0.0f;
+          id(perlin_noise_1d).execute(time_scaled + id(perlin_seed_offset));
+          primary_noise = id(wind_phase_offset) * 0.4f;
+          
+          // Yield to prevent watchdog
+          App.feed_wdt();
+          
+          // Secondary turbulence
+          id(perlin_noise_1d).execute(time_scaled * 2.5f + id(perlin_seed_offset) + 100.0f);
+          float secondary_noise = id(wind_phase_offset) * 0.25f * turbulence;
+          
+          // Fine turbulence
+          id(perlin_noise_1d).execute(time_scaled * 6.0f + id(perlin_seed_offset) + 200.0f);
+          float fine_noise = id(wind_phase_offset) * 0.15f * turbulence;
+          
+          // Yield again
+          App.feed_wdt();
+          
+          // Combine noise layers (reduced complexity)
+          float total_noise = primary_noise + secondary_noise + fine_noise;
+          
+          // Apply noise to base wind speed
+          float current_wind_mph = base_speed * (1.0f + total_noise);
+          
+          // Constrain to realistic atmospheric limits
+          current_wind_mph = fmax(2.0f, fmin(25.0f, current_wind_mph));
+          
+          // Update wind speed sensor
+          id(wind_speed_sensor).publish_state(current_wind_mph);
+          
+          // Convert wind speed to fan percentage (optimized for desktop experience)
+          // Maps 2-20 mph to 15-95% fan speed for good operational range
+          float fan_speed_percent = 15.0f + (current_wind_mph - 2.0f) * (80.0f / 18.0f);
+          fan_speed_percent = fmax(15, fmin(95, fan_speed_percent));
+          
+          // Apply current gust multiplier
+          fan_speed_percent *= id(current_gust_multiplier);
+          
+          // Execute fan speed command
+          id(apply_fan_speed).execute(fan_speed_percent);
+
+  # Gust pattern generation using Perlin noise for natural randomness
+  - id: calculate_gusts
+    then:
+      - lambda: |-
+          if (!id(wind_simulation_active)) return;
+          
+          float gust_freq = id(gust_frequency).state / 100.0f;
+          uint32_t now = millis();
+          float t = now / 1000.0f;
+          
+          // Use higher frequency Perlin noise for gust patterns
+          float gust_time_scale = id(noise_time_scale) * 8.0f;
+          id(perlin_noise_1d).execute(t * gust_time_scale + id(perlin_seed_offset) + 500.0f);
+          float gust_noise = id(wind_phase_offset);
+          
+          // Dynamic threshold based on user preference
+          float gust_threshold = 0.3f - (gust_freq * 0.4f);
+          
+          if (gust_noise > gust_threshold) {
+            // Generate gust strength proportional to noise amplitude
+            float gust_strength_noise = fabs(gust_noise - gust_threshold) / (1.0f - gust_threshold);
+            float gust_strength = 1.0f + gust_strength_noise * id(gust_intensity_factor);
+            
+            // Smooth transition to prevent abrupt changes
+            float current_mult = id(current_gust_multiplier);
+            float blend_factor = 0.15f;
+            id(current_gust_multiplier) = current_mult * (1.0f - blend_factor) + gust_strength * blend_factor;
+            
+            // Update gust strength indicator
+            float gust_percent = (id(current_gust_multiplier) - 1.0f) * 100.0f;
+            id(gust_strength_sensor).publish_state(fmax(0, gust_percent));
+          } else {
+            // Exponential decay back to base wind speed
+            float current_mult = id(current_gust_multiplier);
+            if (current_mult > 1.02f) {
+              id(current_gust_multiplier) = current_mult * 0.92f;
+            } else {
+              id(current_gust_multiplier) = 1.0f;
+              id(gust_strength_sensor).publish_state(0);
+            }
+          }
+
+  # Generate human-readable wind condition descriptions
+  - id: update_wind_description
+    then:
+      - lambda: |-
+          std::string mode = id(wind_mode_select).state;
+          float wind_mph = id(wind_speed_sensor).state;
+          float gust_strength = id(gust_strength_sensor).state;
+          
+          std::string description = "";
+          
+          // Beaufort scale classification
+          if (wind_mph < 4) {
+            description = "Calm";
+          } else if (wind_mph < 8) {
+            description = "Light breeze";
+          } else if (wind_mph < 12) {
+            description = "Gentle breeze";
+          } else if (wind_mph < 18) {
+            description = "Moderate breeze";
+          } else {
+            description = "Fresh breeze";
+          }
+          
+          // Add gust information
+          if (gust_strength > 20) {
+            description += " with gusts";
+          } else if (gust_strength > 5) {
+            description += " with light gusts";
+          }
+          
+          // Add location context
+          if (mode == "Plage du Truc Vert") {
+            description += " (Atlantic)";
+          } else if (mode == "Capri") {
+            description += " (Mediterranean)";
+          } else if (mode == "Plateau de Valensole") {
+            description += " (country side)";
+          } else if (mode == "Fellhorn") {
+            description += " (Alpine)";
+          } else if (mode == "Meseta de Somuncurá") {
+            description += " (Patagonian)";
+          } else if (mode == "Nærøyfjord") {
+            description += " (fjord)";
+          }
+          
+          id(wind_condition_sensor).publish_state(description);
+
+# ====================================================================================
+# SIMULATION CONTROL & MODE MANAGEMENT
+# ====================================================================================
+
+  # Handle wind mode changes with proper cleanup and initialization
+  - id: handle_mode_change
+    then:
+      - lambda: |-
+          std::string mode = id(wind_mode_select).state;
+          ESP_LOGI("wind", "Wind mode changed to: %s", mode.c_str());
+          
+          // Stop existing simulation loops
+          id(wind_physics_loop).stop();
+          id(gust_calculation_loop).stop();
+          id(wind_simulation_active) = false;
+          
+          // Reset wind state
+          id(current_gust_multiplier) = 1.0f;
+          id(gust_strength_sensor).publish_state(0);
+          id(perlin_seed_offset) = (esp_random() % 1000) / 10.0f;
+          
+          // Reset intervals to defaults
+          id(current_base_interval) = 800;
+          id(current_gust_interval) = 200;
+          
+          ESP_LOGI("wind", "Generated new noise seed: %.1f", id(perlin_seed_offset));
+      - delay: 300ms
+      - if:
+          condition:
+            lambda: 'return id(wind_mode_select).state != "Manual";'
+          then:
+            - lambda: |-
+                id(wind_simulation_active) = true;
+                ESP_LOGI("wind", "Starting wind simulation with intervals: base=%dms, gust=%dms", 
+                         id(current_base_interval), id(current_gust_interval));
+            - script.execute: wind_physics_loop
+            - script.execute: gust_calculation_loop
+      - if:
+          condition:
+            lambda: 'return id(wind_mode_select).state == "Manual";'
+          then:
+            - output.turn_off: fan_pwm_output
+            - lambda: 'ESP_LOGI("wind", "Manual mode activated");'
+
+  # Main physics simulation loop with dynamic timing
+  - id: wind_physics_loop
+    mode: restart
+    then:
+      - logger.log: "Starting wind physics simulation"
+      - while:
+          condition:
+            lambda: 'return id(wind_simulation_active);'
+          then:
+            - script.execute: calculate_wind_physics
+            - script.execute: update_wind_description
+            - delay: !lambda "return id(current_base_interval);"
+
+  # Gust calculation loop running at higher frequency
+  - id: gust_calculation_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return id(wind_simulation_active);'
+          then:
+            - script.execute: calculate_gusts
+            - delay: !lambda "return id(current_gust_interval);"
+
+# ====================================================================================
+# USER INTERACTION BUTTONS
+# ====================================================================================
+
+button:
+  # Manual gust trigger for immediate effect
+  - platform: template
+    name: "Quick Gust"
+    id: trigger_gust_button
+    icon: "mdi:weather-windy"
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(wind_simulation_active);'
+          then:
+            - lambda: |-
+                float gust_strength = 1.5f + ((esp_random() % 70) / 100.0f);
+                id(current_gust_multiplier) = gust_strength;
+                float gust_percent = (gust_strength - 1.0f) * 100.0f;
+                id(gust_strength_sensor).publish_state(gust_percent);
+                ESP_LOGI("wind", "Manual gust triggered: %.2f", gust_strength);
+
+  # Force calm conditions temporarily
+  - platform: template
+    name: "Calm Wind"
+    id: calm_wind_button
+    icon: "mdi:weather-windy-variant"
+    on_press:
+      - if:
+          condition:
+            lambda: 'return id(wind_simulation_active);'
+          then:
+            - lambda: |-
+                id(current_gust_multiplier) = 0.7f;
+                id(gust_strength_sensor).publish_state(0);
+                ESP_LOGI("wind", "Calm period triggered");
+
+  # System diagnostics and restart
+  - platform: restart
+    name: "${friendly_name} Restart"
+    id: restart_button
+
+  # Reset wind simulation with new noise seed
+  - platform: template
+    name: "Regenerate Wind Pattern"
+    id: regenerate_pattern_button
+    icon: "mdi:refresh"
+    on_press:
+      - lambda: |-
+          if (id(wind_simulation_active)) {
+            // Generate new noise seed for pattern variation
+            id(perlin_seed_offset) = (esp_random() % 1000) / 10.0f;
+            ESP_LOGI("wind", "New wind pattern generated with seed: %.1f", id(perlin_seed_offset));
+          }
+
+# ====================================================================================
+# SYSTEM MAINTENANCE & MONITORING
+# ====================================================================================
+
+interval:
+  # Periodic system health checks and parameter validation
+  - interval: 30s
+    then:
+      - lambda: |-
+          if (id(wind_simulation_active)) {
+            // Prevent gust multiplier from getting stuck in extreme values
+            if (id(current_gust_multiplier) > 3.0f) {
+              id(current_gust_multiplier) = 1.5f;
+              ESP_LOGW("wind", "Gust multiplier clamped to safe maximum");
+            }
+            if (id(current_gust_multiplier) < 0.5f) {
+              id(current_gust_multiplier) = 0.8f;
+              ESP_LOGW("wind", "Gust multiplier clamped to safe minimum");
+            }
+          }
