@@ -1,0 +1,792 @@
+############################################
+#  Smart Fan with Natural Wind Presets
+############################################
+
+substitutions:
+  device_name: smart-fan
+  friendly_name: "Smart Fan"
+  wind_sensor_entity: "sensor.yourwindsensor"  # Change this to your wind sensor entity
+
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+esp32:
+  board: esp32dev
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: "${friendly_name} Fallback"
+    password: !secret ap_password
+
+api:
+  encryption:
+    key: !secret api_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+logger:
+  level: INFO
+
+# ──────────────────────────────────────────
+# Global Variables for Wind Simulation States
+# ──────────────────────────────────────────
+
+globals:
+  # Gentle Breeze state
+  - id: gentle_last_event_time
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: gentle_in_lull
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: gentle_in_gust
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: gentle_event_duration
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: gentle_lull_target
+    type: float
+    restore_value: false
+    initial_value: '0.12'
+  - id: gentle_gust_target
+    type: float
+    restore_value: false
+    initial_value: '0.45'
+
+  # Ocean Breeze state
+  - id: ocean_last_wave_time
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: ocean_in_calm
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: ocean_in_wave_gust
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: ocean_calm_duration
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: ocean_wave_duration
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: ocean_wave_intensity
+    type: float
+    restore_value: false
+    initial_value: '0.5'
+
+  # Mountain Wind state
+  - id: mountain_last_event
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: mountain_in_valley_calm
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: mountain_in_ridge_gust
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: mountain_event_duration
+    type: uint32_t
+    restore_value: false
+    initial_value: '0'
+  - id: mountain_gust_strength
+    type: float
+    restore_value: false
+    initial_value: '0.6'
+
+# ──────────────────────────────────────────
+# Hardware Configuration
+# ──────────────────────────────────────────
+
+output:
+  - platform: ledc
+    pin: GPIO14
+    id: fan_pwm_output
+    frequency: 21000Hz
+    min_power: 0.1
+
+fan:
+  - platform: speed
+    name: "Manual Setting"
+    id: desk_fan
+    output: fan_pwm_output
+    speed_count: 100
+    restore_mode: RESTORE_DEFAULT_OFF
+    icon: "mdi:fan"
+    on_speed_set:
+      - script.execute:
+          id: apply_speed_with_limit
+          speed_percent: !lambda "return x;"
+      - lambda: 'id(fan_mode_select).publish_state("Manual");'
+
+# ──────────────────────────────────────────
+# Sensors
+# ──────────────────────────────────────────
+
+sensor:
+  # Fan RPM feedback
+  - platform: pulse_counter
+    pin:
+      number: GPIO27
+      mode:
+        input: true
+        pullup: true
+    name: "Fan RPM"
+    id: fan_rpm
+    update_interval: 0.5s
+    unit_of_measurement: "RPM"
+    icon: "mdi:speedometer"
+    accuracy_decimals: 0
+    filters:
+      - multiply: 0.5
+
+  # External wind speed sensor from Home Assistant
+  - platform: homeassistant
+    id: outdoor_wind_speed
+    entity_id: ${wind_sensor_entity}
+    name: "Wind Speed"
+    unit_of_measurement: "m/s"
+    accuracy_decimals: 1
+    icon: "mdi:weather-windy"
+    filters:
+      - filter_out: nan
+      - clamp:
+          min_value: 0
+          max_value: 50
+      - timeout: 
+          timeout: 600s
+          value: 0
+    on_value:
+      - if:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Wind Sync";'
+          then:
+            - script.execute: apply_wind_sync
+
+# ──────────────────────────────────────────
+# Connection Status Monitoring
+# ──────────────────────────────────────────
+
+binary_sensor:
+  - platform: status
+    name: "${friendly_name} Connection"
+    id: connection_status
+
+  # Monitor if wind data is available
+  - platform: template
+    name: "Wind Data Available"
+    id: wind_data_available
+    lambda: |-
+      return !isnan(id(outdoor_wind_speed).state) && id(outdoor_wind_speed).state >= 0;
+    filters:
+      - delayed_on: 2s
+      - delayed_off: 30s
+
+# ──────────────────────────────────────────
+# Fan Mode Selection
+# ──────────────────────────────────────────
+
+select:
+  - platform: template
+    name: "Fan Mode"
+    id: fan_mode_select
+    icon: "mdi:fan-auto"
+    options:
+      - "Manual"
+      - "Gentle Breeze"
+      - "Ocean Breeze" 
+      - "Mountain Wind"
+      - "Wind Sync"
+    initial_option: "Ocean Breeze"
+    restore_value: true
+    optimistic: true
+    on_value:
+      - script.execute: handle_mode_change
+
+# ──────────────────────────────────────────
+# Configuration Parameters
+# ──────────────────────────────────────────
+
+number:
+  # Global Settings
+  - platform: template
+    name: "Fan Speed Limit"
+    id: fan_speed_limit
+    min_value: 20
+    max_value: 100
+    step: 5
+    initial_value: 65
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:speedometer-medium"
+    mode: box
+    optimistic: true
+
+  # Natural Wind Parameters
+  - platform: template
+    name: "Base Wind Speed"
+    id: base_wind_speed
+    min_value: 5
+    max_value: 80
+    step: 1
+    initial_value: 20
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:weather-partly-cloudy"
+    mode: box
+    optimistic: true
+
+  - platform: template
+    name: "Wind Variation Range"
+    id: wind_variation_range
+    min_value: 5
+    max_value: 95
+    step: 1
+    initial_value: 30
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:tune-vertical"
+    mode: box
+    optimistic: true
+
+  - platform: template
+    name: "Gentle Gust Max"
+    id: gentle_gust_max
+    min_value: 40
+    max_value: 100
+    step: 1
+    initial_value: 55
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:weather-windy"
+    mode: box
+    optimistic: true
+
+  - platform: template
+    name: "Lull Duration"
+    id: lull_duration
+    min_value: 3
+    max_value: 30
+    step: 1
+    initial_value: 10
+    unit_of_measurement: "s"
+    restore_value: true
+    icon: "mdi:pause"
+    mode: box
+    optimistic: true
+
+  - platform: template
+    name: "Gust Probability"
+    id: gust_probability
+    min_value: 2
+    max_value: 90
+    step: 1
+    initial_value: 5
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:weather-hurricane"
+    mode: box
+    optimistic: true
+
+  - platform: template
+    name: "Lull Probability"
+    id: lull_probability
+    min_value: 3
+    max_value: 90
+    step: 1
+    initial_value: 10
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:leaf"
+    mode: box
+    optimistic: true
+
+  - platform: template
+    name: "Wind Cycle Period"
+    id: wind_cycle_period
+    min_value: 5
+    max_value: 120
+    step: 1
+    initial_value: 15
+    unit_of_measurement: "s"
+    restore_value: true
+    icon: "mdi:timer-outline"
+    mode: box
+    optimistic: true
+
+  # Wind Sync Settings  
+  - platform: template
+    name: "Max Wind Speed Scale"
+    id: wind_speed_scale_max
+    min_value: 8
+    max_value: 25
+    step: 0.5
+    initial_value: 12.0
+    unit_of_measurement: "m/s"
+    restore_value: true
+    icon: "mdi:weather-windy-variant"
+    mode: box
+    optimistic: true
+
+  # Wind smoothing factor
+  - platform: template
+    name: "Wind Smoothing"
+    id: wind_smoothing
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.1
+    initial_value: 0.3
+    restore_value: true
+    icon: "mdi:tune"
+    mode: box
+    optimistic: true
+
+  # Global variation scaling factor
+  - platform: template
+    name: "Variation Intensity"
+    id: variation_intensity
+    min_value: 0.1
+    max_value: 5.0
+    step: 0.1
+    initial_value: 1.0
+    restore_value: true
+    icon: "mdi:tune-vertical-variant"
+    mode: box
+    optimistic: true
+
+# ──────────────────────────────────────────
+# Control Scripts
+# ──────────────────────────────────────────
+
+script:
+  # Core function to set fan speed with safety limits
+  - id: apply_speed_with_limit
+    parameters:
+      speed_percent: float
+    then:
+      - lambda: |-
+          float requested = speed_percent / 100.0f;
+          float limit = id(fan_speed_limit).state / 100.0f;
+          float final_speed = (requested > limit) ? limit : requested;
+          
+          if (final_speed < 0.05f) {
+            id(fan_pwm_output).turn_off();
+          } else {
+            id(fan_pwm_output).set_level(final_speed);
+          }
+          
+          ESP_LOGD("fan", "Speed set: %.1f%% (requested: %.1f%%, limit: %.1f%%)", 
+                   final_speed * 100, requested * 100, limit * 100);
+
+  # Handle mode changes from dropdown
+  - id: handle_mode_change
+    then:
+      - lambda: |-
+          std::string mode = id(fan_mode_select).state;
+          ESP_LOGI("fan", "Mode changed to: %s", mode.c_str());
+          
+          // Stop all running simulations
+          id(gentle_breeze_simulation).stop();
+          id(ocean_breeze_simulation).stop();
+          id(mountain_wind_simulation).stop();
+          
+          // Reset all state variables
+          id(gentle_in_lull) = false;
+          id(gentle_in_gust) = false;
+          id(ocean_in_calm) = false;
+          id(ocean_in_wave_gust) = false;
+          id(mountain_in_valley_calm) = false;
+          id(mountain_in_ridge_gust) = false;
+      - delay: 100ms
+      - if:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Gentle Breeze";'
+          then:
+            - script.execute: gentle_breeze_simulation
+      - if:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Ocean Breeze";'
+          then:
+            - script.execute: ocean_breeze_simulation
+      - if:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Mountain Wind";'
+          then:
+            - script.execute: mountain_wind_simulation
+      - if:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Wind Sync";'
+          then:
+            - script.execute: apply_wind_sync
+      - if:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Manual";'
+          then:
+            - output.turn_off: fan_pwm_output
+
+  # Gentle breeze simulation
+  - id: gentle_breeze_simulation
+    mode: restart
+    then:
+      - logger.log: "Gentle breeze mode activated"
+      - while:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Gentle Breeze";'
+          then:
+            - lambda: |-
+                uint32_t now = millis();
+                float base_speed = id(base_wind_speed).state / 100.0f;
+                float variation = (id(wind_variation_range).state / 100.0f) * id(variation_intensity).state;
+                float cycle_period = id(wind_cycle_period).state * 1000.0f;
+                
+                // Check if current special event should end
+                if ((id(gentle_in_lull) || id(gentle_in_gust)) && 
+                    (now - id(gentle_last_event_time)) > id(gentle_event_duration)) {
+                  id(gentle_in_lull) = false;
+                  id(gentle_in_gust) = false;
+                  ESP_LOGD("fan", "Gentle breeze: Returning to normal flow");
+                }
+                
+                // Check for new events (only if not currently in an event)
+                if (!id(gentle_in_lull) && !id(gentle_in_gust)) {
+                  if (esp_random() % 1000 < id(lull_probability).state) {
+                    id(gentle_in_lull) = true;
+                    id(gentle_last_event_time) = now;
+                    id(gentle_event_duration) = (id(lull_duration).state + (esp_random() % 5)) * 1000;
+                    id(gentle_lull_target) = 0.08f + (esp_random() % 8) / 100.0f; // 8-15%
+                    ESP_LOGD("fan", "Gentle breeze: Entering lull phase for %d seconds", id(gentle_event_duration)/1000);
+                  } else if (esp_random() % 1000 < id(gust_probability).state) {
+                    id(gentle_in_gust) = true;
+                    id(gentle_last_event_time) = now;
+                    id(gentle_event_duration) = 3000 + (esp_random() % 4000); // 3-7 seconds
+                    float gust_intensity = 0.3f + (esp_random() % 40) / 100.0f; // 30-70% intensity
+                    id(gentle_gust_target) = base_speed + variation * gust_intensity;
+                    if (id(gentle_gust_target) > id(gentle_gust_max).state / 100.0f) {
+                      id(gentle_gust_target) = id(gentle_gust_max).state / 100.0f;
+                    }
+                    ESP_LOGD("fan", "Gentle breeze: Entering gentle gust phase (%.1f%%) for %d seconds", 
+                            id(gentle_gust_target) * 100, id(gentle_event_duration)/1000);
+                  }
+                }
+                
+                float target_speed;
+                
+                if (id(gentle_in_lull)) {
+                  // Gradual transition into and out of lull
+                  float lull_progress = (float)(now - id(gentle_last_event_time)) / id(gentle_event_duration);
+                  float lull_fade = 1.0f;
+                  if (lull_progress < 0.3f) {
+                    lull_fade = lull_progress / 0.3f; // Fade in
+                  } else if (lull_progress > 0.7f) {
+                    lull_fade = (1.0f - lull_progress) / 0.3f; // Fade out
+                  }
+                  target_speed = base_speed * (1.0f - lull_fade) + id(gentle_lull_target) * lull_fade;
+                } else if (id(gentle_in_gust)) {
+                  // Smooth gust curve
+                  float gust_progress = (float)(now - id(gentle_last_event_time)) / id(gentle_event_duration);
+                  float gust_curve = sinf(M_PI * gust_progress); // Bell curve
+                  target_speed = base_speed + (id(gentle_gust_target) - base_speed) * gust_curve;
+                } else {
+                  // Normal gentle variation with longer cycles
+                  float phase1 = fmod(now / cycle_period, 1.0f);
+                  float phase2 = fmod(now / (cycle_period * 1.3f), 1.0f);
+                  
+                  float wave1 = 0.5f + 0.4f * sinf(2.0f * M_PI * phase1);
+                  float wave2 = 0.5f + 0.2f * sinf(2.0f * M_PI * phase2);
+                  float combined_wave = (wave1 + wave2) / 2.0f;
+                  
+                  target_speed = base_speed + variation * (combined_wave - 0.5f);
+                  
+                  // Add gentle micro-variations
+                  float micro_noise = (esp_random() % 21 - 10) / 1000.0f * id(variation_intensity).state; // ±1% scaled
+                  target_speed += micro_noise;
+                }
+                
+                // Ensure reasonable bounds
+                if (target_speed < 0.08f) target_speed = 0.08f;
+                if (target_speed > 0.8f) target_speed = 0.8f;
+                
+                id(apply_speed_with_limit).execute(target_speed * 100.0f);
+            - delay: 1200ms
+
+  # Ocean breeze simulation
+  - id: ocean_breeze_simulation
+    mode: restart
+    then:
+      - logger.log: "Ocean breeze mode activated"
+      - while:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Ocean Breeze";'
+          then:
+            - lambda: |-
+                uint32_t now = millis();
+                float base_speed = id(base_wind_speed).state / 100.0f;
+                float variation = (id(wind_variation_range).state / 100.0f) * id(variation_intensity).state;
+                float cycle_period = id(wind_cycle_period).state * 1000.0f;
+                
+                // End current ocean events
+                if ((id(ocean_in_calm) || id(ocean_in_wave_gust)) && 
+                    (now - id(ocean_last_wave_time)) > (id(ocean_in_calm) ? id(ocean_calm_duration) : id(ocean_wave_duration))) {
+                  id(ocean_in_calm) = false;
+                  id(ocean_in_wave_gust) = false;
+                }
+                
+                // Ocean wave patterns - more frequent but gentler events
+                if (!id(ocean_in_calm) && !id(ocean_in_wave_gust)) {
+                  if (esp_random() % 1000 < (id(lull_probability).state + 3)) { // Slightly higher calm probability for ocean
+                    id(ocean_in_calm) = true;
+                    id(ocean_last_wave_time) = now;
+                    id(ocean_calm_duration) = 4000 + (esp_random() % 8000); // 4-12 seconds
+                    ESP_LOGD("fan", "Ocean: Entering calm period for %d seconds", id(ocean_calm_duration)/1000);
+                  } else if (esp_random() % 1000 < (id(gust_probability).state + 2)) {
+                    id(ocean_in_wave_gust) = true;
+                    id(ocean_last_wave_time) = now;
+                    id(ocean_wave_duration) = 5000 + (esp_random() % 10000); // 5-15 seconds
+                    id(ocean_wave_intensity) = 0.4f + (esp_random() % 40) / 100.0f;
+                    ESP_LOGD("fan", "Ocean: Wave gust starting, intensity %.1f%%, duration %d seconds", 
+                            id(ocean_wave_intensity) * 100, id(ocean_wave_duration)/1000);
+                  }
+                }
+                
+                float target_speed;
+                
+                if (id(ocean_in_calm)) {
+                  // Ocean calm - very gentle, rhythmic breathing
+                  float calm_progress = (float)(now - id(ocean_last_wave_time)) / id(ocean_calm_duration);
+                  float calm_breath = 0.5f + 0.3f * sinf(2.0f * M_PI * calm_progress * 3.0f); // 3 breaths per calm period
+                  target_speed = (base_speed * 0.6f) * calm_breath;
+                } else if (id(ocean_in_wave_gust)) {
+                  // Ocean wave - rolling intensity
+                  float wave_progress = (float)(now - id(ocean_last_wave_time)) / id(ocean_wave_duration);
+                  float wave_pattern = 0.3f + 0.7f * (sinf(2.0f * M_PI * wave_progress * 2.0f) + 1.0f) / 2.0f;
+                  target_speed = base_speed + variation * id(ocean_wave_intensity) * wave_pattern;
+                } else {
+                  // Normal ocean rhythm - steady with gentle swells
+                  float phase1 = fmod(now / cycle_period, 1.0f);
+                  float phase2 = fmod(now / (cycle_period * 0.7f), 1.0f);
+                  
+                  float swell = 0.5f + 0.35f * sinf(2.0f * M_PI * phase1);
+                  float ripple = 0.5f + 0.15f * sinf(2.0f * M_PI * phase2);
+                  
+                  target_speed = base_speed + variation * (swell * 0.7f + ripple * 0.3f - 0.5f);
+                  
+                  // Ocean texture - gentle randomness
+                  float ocean_texture = (esp_random() % 15 - 7) / 1000.0f * id(variation_intensity).state;
+                  target_speed += ocean_texture;
+                }
+                
+                // Ocean bounds
+                if (target_speed < 0.10f) target_speed = 0.10f;
+                if (target_speed > id(gentle_gust_max).state / 100.0f) {
+                  target_speed = id(gentle_gust_max).state / 100.0f;
+                }
+                
+                id(apply_speed_with_limit).execute(target_speed * 100.0f);
+            - delay: 600ms
+
+  # Mountain wind simulation
+  - id: mountain_wind_simulation
+    mode: restart
+    then:
+      - logger.log: "Mountain wind mode activated"
+      - while:
+          condition:
+            lambda: 'return id(fan_mode_select).state == "Mountain Wind";'
+          then:
+            - lambda: |-
+                uint32_t now = millis();
+                float base_speed = (id(base_wind_speed).state + 8) / 100.0f; // Slightly higher base for mountain
+                float variation = (id(wind_variation_range).state + 5) / 100.0f; // More variation
+                float cycle_period = (id(wind_cycle_period).state - 10) * 1000.0f; // Faster cycles
+                
+                // End mountain events
+                if ((id(mountain_in_valley_calm) || id(mountain_in_ridge_gust)) && 
+                    (now - id(mountain_last_event)) > id(mountain_event_duration)) {
+                  id(mountain_in_valley_calm) = false;
+                  id(mountain_in_ridge_gust) = false;
+                }
+                
+                // Mountain weather patterns
+                if (!id(mountain_in_valley_calm) && !id(mountain_in_ridge_gust)) {
+                  if (esp_random() % 1000 < id(lull_probability).state) {
+                    id(mountain_in_valley_calm) = true;
+                    id(mountain_last_event) = now;
+                    id(mountain_event_duration) = 6000 + (esp_random() % 12000); // 6-18 seconds
+                    ESP_LOGD("fan", "Mountain: Valley calm for %d seconds", id(mountain_event_duration)/1000);
+                  } else if (esp_random() % 1000 < (id(gust_probability).state + 5)) { // More frequent gusts
+                    id(mountain_in_ridge_gust) = true;
+                    id(mountain_last_event) = now;
+                    id(mountain_event_duration) = 4000 + (esp_random() % 8000); // 4-12 seconds
+                    id(mountain_gust_strength) = 0.5f + (esp_random() % 50) / 100.0f; // 50-100% intensity
+                    ESP_LOGD("fan", "Mountain: Ridge gust %.1f%% for %d seconds", 
+                            id(mountain_gust_strength) * 100, id(mountain_event_duration)/1000);
+                  }
+                }
+                
+                float target_speed;
+                
+                if (id(mountain_in_valley_calm)) {
+                  // Valley calm - very still with occasional whispers
+                  float calm_progress = (float)(now - id(mountain_last_event)) / id(mountain_event_duration);
+                  float whisper = 0.5f + 0.2f * sinf(2.0f * M_PI * calm_progress * 1.5f);
+                  target_speed = base_speed * 0.4f * whisper;
+                } else if (id(mountain_in_ridge_gust)) {
+                  // Ridge gust - building up and tapering off
+                  float gust_progress = (float)(now - id(mountain_last_event)) / id(mountain_event_duration);
+                  float gust_curve;
+                  if (gust_progress < 0.3f) {
+                    gust_curve = gust_progress / 0.3f; // Build up
+                  } else if (gust_progress > 0.7f) {
+                    gust_curve = (1.0f - gust_progress) / 0.3f; // Taper off
+                  } else {
+                    gust_curve = 1.0f; // Sustained
+                  }
+                  target_speed = base_speed + variation * id(mountain_gust_strength) * gust_curve;
+                } else {
+                  // Normal mountain wind - irregular but not chaotic
+                  float phase1 = fmod(now / cycle_period, 1.0f);
+                  float phase2 = fmod(now / (cycle_period * 1.4f), 1.0f);
+                  float phase3 = fmod(now / (cycle_period * 0.6f), 1.0f);
+                  
+                  float terrain_effect = 0.5f + 0.3f * sinf(2.0f * M_PI * phase1) + 
+                                        0.15f * sinf(2.0f * M_PI * phase2) +
+                                        0.05f * sinf(2.0f * M_PI * phase3);
+                  
+                  target_speed = base_speed + variation * (terrain_effect - 0.5f);
+                  
+                  // Mountain turbulence - more noticeable but not jarring
+                  float turbulence = (esp_random() % 25 - 12) / 1000.0f;
+                  target_speed += turbulence;
+                }
+                
+                // Mountain bounds - can be more variable
+                if (target_speed < 0.05f) target_speed = 0.05f;
+                if (target_speed > (id(gentle_gust_max).state + 15) / 100.0f) {
+                  target_speed = (id(gentle_gust_max).state + 15) / 100.0f;
+                }
+                
+                id(apply_speed_with_limit).execute(target_speed * 100.0f);
+            - delay: 450ms
+
+  # Apply Home Assistant wind sync with smoothing
+  - id: apply_wind_sync
+    mode: queued
+    then:
+      - lambda: |-
+          if (id(fan_mode_select).state != "Wind Sync") return;
+          
+          float wind_speed = id(outdoor_wind_speed).state;
+          float max_wind = id(wind_speed_scale_max).state;
+          
+          if (isnan(wind_speed) || wind_speed < 0.1f) {
+            ESP_LOGW("fan", "Invalid wind data, setting fan to minimum");
+            id(apply_speed_with_limit).execute(15.0f);
+            return;
+          }
+          
+          float speed_ratio = wind_speed / max_wind;
+          if (speed_ratio > 1.0f) speed_ratio = 1.0f;
+          
+          float fan_percent = 20.0f + 70.0f * sqrtf(speed_ratio);
+          
+          ESP_LOGI("fan", "Wind sync: %.1f m/s → %.1f%%", wind_speed, fan_percent);
+          id(apply_speed_with_limit).execute(fan_percent);
+
+# ──────────────────────────────────────────
+# Status Display
+# ──────────────────────────────────────────
+
+text_sensor:
+  - platform: template
+    name: "Fan Status"
+    id: fan_status_display
+    icon: "mdi:information-outline"
+    lambda: |-
+      std::string mode = id(fan_mode_select).state;
+      if (mode == "Manual") {
+        float speed = id(desk_fan).speed / 100.0f * 100.0f;
+        return std::string("Manual: ") + to_string((int)speed) + "%";
+      } else if (mode == "Gentle Breeze") {
+        return std::string("Gentle Breeze: Natural rhythm");
+      } else if (mode == "Ocean Breeze") {
+        return std::string("Ocean Breeze: Wave patterns");
+      } else if (mode == "Mountain Wind") {
+        return std::string("Mountain Wind: Variable gusts");
+      } else if (mode == "Wind Sync") {
+        float wind = id(outdoor_wind_speed).state;
+        if (!isnan(wind)) {
+          return std::string("Wind Sync: ") + to_string((int)(wind * 10) / 10.0f) + " m/s";
+        } else {
+          return std::string("Wind Sync: No Data");
+        }
+      }
+      return mode;
+    update_interval: 5s
+
+  # Wind pattern status for natural modes
+  - platform: template
+    name: "Wind Pattern"
+    id: wind_pattern_status
+    icon: "mdi:waves"
+    lambda: |-
+      std::string mode = id(fan_mode_select).state;
+      if (mode == "Gentle Breeze") {
+        if (id(gentle_in_lull)) {
+          return std::string("Calm period");
+        } else if (id(gentle_in_gust)) {
+          return std::string("Gentle gust");
+        } else {
+          return std::string("Normal flow");
+        }
+      } else if (mode == "Ocean Breeze") {
+        if (id(ocean_in_calm)) {
+          return std::string("Ocean calm");
+        } else if (id(ocean_in_wave_gust)) {
+          return std::string("Wave surge");
+        } else {
+          return std::string("Steady breeze");
+        }
+      } else if (mode == "Mountain Wind") {
+        if (id(mountain_in_valley_calm)) {
+          return std::string("Valley calm");
+        } else if (id(mountain_in_ridge_gust)) {
+          return std::string("Ridge gust");
+        } else {
+          return std::string("Mountain flow");
+        }
+      }
+      return std::string("N/A");
+    update_interval: 3s
+
+  # Wind data source status
+  - platform: template
+    name: "Wind Data Source"
+    id: wind_data_source
+    icon: "mdi:database"
+    lambda: |-
+      float wind_speed = id(outdoor_wind_speed).state;
+      bool wind_ok = !isnan(wind_speed) && wind_speed >= 0;
+      
+      if (wind_ok) {
+        return std::string("Wind Data Available");
+      } else {
+        return std::string("No Wind Data");
+      }
+    update_interval: 10s
