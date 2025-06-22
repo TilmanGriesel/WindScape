@@ -1,5 +1,4 @@
-# Breezer 9000
-aka _ha_esphome_desk_fan_
+# ESPHome WindScape
 
 About a year ago, I picked up the Noctua NV-FS1. Sure, it's arguably overpriced for a desk fan, but as a self-proclaimed Noctua fanboy, I have no regrets. It’s whisper-quiet, has a unique aesthetic, and fits perfectly into my workspace.
 
@@ -11,16 +10,54 @@ So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPH
 
 ## Features
 
-**Seaside Breeze Mode** - Realistic wind patterns with:
+**Wind Simulation** - Realistic wind patterns with:
 - Natural wave-like speed variations
 - Random gusts and peaceful lulls
-- Fully customizable intensity and timing
 
 **Smart Controls**
 - 100-level speed control
 - Real-time RPM monitoring
 - Wireless control via Home Assistant
 - OTA firmware updates
+
+## Wind Mode Presets
+
+Transform the atmosphere of your room with realistic wind profiles inspired by beautiful locations around the world. Each preset is designed to mimic the **natural wind behavior** you might feel in these places from gentle seaside breezes to dramatic mountain gusts.
+
+#### 1. Plage du Truc Vert (Atlantic Coast, France)
+
+**Feel:** Strong, steady seaside wind with playful gusts
+**Experience:** Like standing on a breezy beach where ocean winds roll in with energy. Great for a refreshing, invigorating airflow that feels alive and ever-changing.
+
+#### 2. Capri (Mediterranean Island, Italy)
+
+**Feel:** Soft and relaxed coastal breeze
+**Experience:** Gentle wind like what you’d feel while lounging on a terrace overlooking the Mediterranean. Ideal for calm afternoons, reading, or light background airflow.
+
+#### 3. Plateau de Valensole (French Countryside)
+
+**Feel:** Peaceful, barely-there wind
+**Experience:** Imagine a warm summer day in a quiet lavender field. The air moves softly, almost like a whisper. Perfect for unwinding or sleeping.
+
+#### 4. Fellhorn (Alpine Mountain Range)
+
+**Feel:** Crisp, lively mountain air with frequent gusts
+**Experience:** Like opening a window in the Alps — cool, brisk, and full of natural movement. Great for simulating fresh, outdoor mountain air indoors.
+
+#### 5. Meseta de Somuncurá (Patagonia, Argentina)
+
+**Feel:** Bold and intense wind with powerful surges
+**Experience:** Feels like you’re standing in one of the windiest places on Earth. Ideal for a dramatic atmosphere, energizing effect, or maximum airflow performance.
+
+#### 6. Nærøyfjord (Norwegian Fjords)
+
+**Feel:** Channeled, dramatic airflow with noticeable shifts
+**Experience:** Like the wind funnelling between tall cliffs — unpredictable and thrilling. Excellent for a unique, immersive airflow experience.
+
+#### 7. Manual Mode
+
+**Feel:** Whatever you choose
+**Experience:** Full control. No simulation, just direct manual speed adjustment — great for testing or when you want a consistent fan output without variation.
 
 ## Quick Setup
 
