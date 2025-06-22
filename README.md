@@ -4,7 +4,7 @@ About a year ago, I picked up the Noctua NV-FS1. Sure, it's arguably overpriced 
 
 That said, one thing always felt missing: a natural breeze. The constant airflow just doesn't replicate the soothing randomness of a gentle seaside wind.
 
-So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPHome, fully integrated with Home Assistant. It randomizes fan speed to create a calming, natural airflow pattern right at my desk. I love the result. Maybe you will too. If you like this project, leaving a star would be lovely.
+So I built a solution, The Breezer 9000. It’s a PWM controller powered by ESPHome, fully integrated with Home Assistant. It randomizes fan speed to create a calming, natural airflow pattern right at my desk. I loved the result, kept working on it and WindScape was born. If you like this project, leaving a star would be lovely.
 
 
 ## Features
