@@ -5,56 +5,64 @@ The main goal is to create realistic, location-inspired wind patterns that mimic
 
 ## Features
 
-- **Wind Simulation Engine** with layered sine wave oscillations
+- **Randomized Wind Simulation Engine** with natural weather phases
 - **6 Location Presets** inspired by real-world locations
 - **100-level speed control**
 - **Real-time RPM monitoring** (optional sensor)
 - **Wireless control** via Home Assistant and WiFI
 - **Automation-Ready** via Home Assistant, combine sensors to set presets and parameters
 - **OTA firmware updates** via ESPHome
-- **Activity-based wind cycles** (quiet/normal/active periods)
+- **Weather phase system** (quiet air/medium conditions/high activity)
 
 ## Wind Mode Presets
 
-Transform the atmosphere of your room with realistic wind profiles inspired by beautiful locations around the world. Each preset is designed to mimic the **natural wind behavior** you might feel in these places from gentle seaside breezes to dramatic mountain gusts.
+Transform the atmosphere of your room with realistic wind profiles inspired by beautiful locations around the world. Each preset configures different wind speed ranges, gust characteristics, and weather phase behaviors to create unique atmospheric experiences.
 
 #### 1. Ocean (Atlantic Coast)
-- **Feel:** Strong, steady seaside wind with rolling gusts
-- **Experience:** Like standing on a breezy beach where ocean winds roll in with energy. Great for a refreshing, invigorating airflow that feels alive and ever-changing.
+- **Wind Range:** 8-16 mph (moderate to fresh breeze)
+- **Gust Behavior:** Frequent rolling gusts (3% probability, 2.0x intensity, 4s duration)
+- **Weather Phases:** Balanced transitions with sustained medium and high activity periods
+- **Experience:** Like standing on a breezy beach with consistent ocean winds and rolling wave-like gusts. Great for energizing, consistent airflow.
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/plage.png?raw=true" width="100">
 
 #### 2. Mediterranean (Italian Coast)
-- **Feel:** Soft and relaxed coastal breeze
-- **Experience:** Gentle wind like what you'd feel while lounging on a terrace overlooking the Mediterranean. Ideal for calm afternoons, reading, or light background airflow.
+- **Wind Range:** 4-10 mph (light to gentle breeze)
+- **Gust Behavior:** Gentle, infrequent gusts (1.5% probability, 1.6x intensity, 2.5s duration)
+- **Weather Phases:** Longer quiet periods, shorter high activity phases
+- **Experience:** Soft coastal breeze perfect for relaxation, reading, or background airflow. Gentle enough for sleep yet alive enough to feel natural.
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/capri.png?raw=true" width="100">
 
 #### 3. Countryside (French Fields)
-
-- **Feel:** Peaceful, barely-there wind
-- **Experience:** Imagine a warm summer day in a quiet lavender field. The air moves softly, almost like a whisper. Perfect for unwinding or sleeping.
+- **Wind Range:** 2-8 mph (calm to light breeze)
+- **Gust Behavior:** Rare, subtle gusts (0.8% probability, 1.4x intensity, 5s duration)
+- **Weather Phases:** Extended quiet periods, very gentle high activity
+- **Experience:** Whisper-quiet rural air with minimal variation. Perfect for sleeping, meditation, or when you want barely-noticeable natural airflow.
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/valensole.png?raw=true" width="100">
 
 #### 4. Mountains (Alpine Range)
-
-- **Feel:** Crisp, lively mountain air with frequent gusts
-- **Experience:** Like opening a window in the Alps — cool, brisk, and full of natural movement. Great for simulating fresh, outdoor mountain air indoors.
+- **Wind Range:** 6-18 mph (moderate to strong breeze)
+- **Gust Behavior:** Sharp, frequent gusts (5% probability, 2.3x intensity, 2s duration)
+- **Weather Phases:** Quick transitions, shorter phases, dramatic weather changes
+- **Experience:** Crisp mountain air with sudden wind shifts and sharp gusts. Ideal for creating an invigorating alpine atmosphere indoors.
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/alpine.png?raw=true" width="100">
 
 #### 5. Plains (Patagonian Steppes)
-
-- **Feel:** Bold and intense wind with powerful surges
-- **Experience:** Feels like you're standing in one of the windiest places on Earth. Ideal for a dramatic atmosphere, energizing effect, or maximum airflow performance.
+- **Wind Range:** 10-22 mph (fresh to strong breeze)
+- **Gust Behavior:** Powerful, sustained gusts (8% probability, 2.5x intensity, 6s duration)
+- **Weather Phases:** High activity periods are intense and frequent
+- **Experience:** The windiest preset - constant strong airflow with powerful gusts. Maximum performance for hot days or when you want dramatic atmospheric effects.
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/patagonia.png?raw=true" width="100">
 
 #### 6. Fjord (Norwegian Fjords)
-
-- **Feel:** Channeled, dramatic airflow with pressure shifts
-- **Experience:** Like the wind funnelling between tall cliffs, unpredictable and thrilling. Excellent for a unique, immersive airflow experience.
+- **Wind Range:** 8-20 mph (moderate to strong breeze)
+- **Gust Behavior:** Channeled, dramatic gusts (6% probability, 2.4x intensity, 3.5s duration)
+- **Weather Phases:** Unpredictable transitions mimicking fjord wind patterns
+- **Experience:** Dynamic airflow that feels like wind funneling between cliffs. Unique, immersive experience with surprising intensity changes.
 
 <img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/fjord.png?raw=true" width="100">
 
@@ -132,9 +140,9 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 **Sliders:**
 - **Wind Intensity** (30–150%) - Global power multiplier for all wind effects
 - **Gust Frequency** (10–90%) - How often natural gusts occur
-- **Minimum Oscillation** (5–50%) - Baseline wind variation to prevent static airflow
-- **Minimum Fan Speed** (15–100%) - Safety limit to prevent fan stalling
-- **Maximum Fan Speed** (15–100%) - Upper safety limit for fan operation
+- **Wind Variability** (5–40%) - How much wind speed varies over time (replaces oscillation)
+- **Minimum Fan Speed** (0–50%) - Safety limit to prevent fan stalling
+- **Maximum Fan Speed** (40–100%) - Upper safety limit for fan operation
 
 **Select:**
 - **Wind Mode** - Choose from 6 location presets or Manual mode
@@ -144,56 +152,83 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 
 ## How It Works
 
-**WindScape** creates realistic wind behavior using a sophisticated atmospheric simulation engine that translates natural wind patterns into PWM signals for PC fan control.
+**WindScape** creates realistic wind behavior using a sophisticated randomized atmospheric simulation engine that mimics natural weather patterns with distinct phases and unpredictable variation.
 
 ### Core Wind Engine
 
-**Layered Sine Wave System:**
-- **Primary Layer:** Slow breathing pattern that mimics natural atmospheric pressure changes
-- **Secondary Layer:** Medium-frequency micro-turbulence for realistic variation  
-- **Tertiary Layer:** High-frequency fine detail that adds natural texture
-- **Mathematical Harmony:** Uses carefully chosen frequency ratios (3.7x, 11.3x) to create non-repeating, organic patterns
+**Randomized Target System:**
+- **Target-Based Movement:** Wind smoothly moves toward random targets within location-specific ranges
+- **Phase-Specific Behavior:** Each weather phase has its own wind speed ranges and characteristics
+- **Micro-Turbulence:** Constant small random fluctuations add natural texture and prevent static air
+- **Anti-Stagnation:** Multiple overlapping systems ensure continuous movement and variation
 
-**Activity-Based Cycles:**
-- **Quiet Periods:** Gentle, minimal variation with extended breathing cycles
-- **Normal Conditions:** Standard wind behavior with balanced activity
-- **Active Periods:** Increased turbulence and more frequent, dramatic gusts
-- **Automatic Transitions:** System naturally cycles between states with weighted probabilities
+**Weather Phase System:**
+WindScape now features three distinct weather phases that create natural atmospheric cycles:
+
+#### 1. Quiet Air Phase (90-210 seconds)
+- **Wind Range:** 30% to 40% of location's base range
+- **Turbulence:** Minimal (0.2x intensity)
+- **Gusts:** 40% less frequent, gentler (1.1-1.5x intensity, 2-6s duration)
+- **Behavior:** Slow, gentle changes for peaceful, barely-there wind
+- **Experience:** Like a calm summer evening or early morning stillness
+
+#### 2. Medium Conditions Phase (120-300 seconds)
+- **Wind Range:** 70% to 80% of location's base range
+- **Turbulence:** Normal (0.6x intensity)
+- **Gusts:** Standard frequency and intensity (1.2-1.8x, 1.5-6.5s duration)
+- **Behavior:** Moderate variation with regular activity
+- **Experience:** Typical outdoor breeze with natural movement
+
+#### 3. High Activity Phase (60-150 seconds)
+- **Wind Range:** 40% to 120% of location's base range (can exceed normal maximum!)
+- **Turbulence:** Strong (1.2x intensity)
+- **Gusts:** 2.5x more frequent, powerful (1.4-2.4x intensity, 1-4s duration)
+- **Behavior:** Rapid, dramatic changes with frequent strong gusts
+- **Experience:** Storm-like conditions with intense, energizing airflow
+
+### Natural Phase Transitions
+
+The system automatically transitions between phases using realistic probabilities:
+- **Quiet → Medium** (60%) or **High** (40%) - sudden storms are possible!
+- **Medium → Quiet** (30%), **Stay Medium** (40%), or **High** (30%)
+- **High → Medium** (40%), **Quiet** (30%) - sudden calm, or **Stay High** (30%)
 
 ### Location-Specific Behavior
 
-Each preset adjusts multiple atmospheric parameters:
-- **Base wind speed** and **breathing patterns**
-- **Micro-turbulence intensity** and **gust characteristics**
-- **Update frequencies** and **activity modifiers**
-- **Location-specific adaptations** for quiet and active periods
+Each preset adjusts multiple atmospheric parameters for each phase:
+- **Base wind speed ranges** and **phase-specific modifications**
+- **Gust probability** and **intensity characteristics**
+- **Turbulence levels** and **change rates**
+- **Phase duration preferences** and **transition behaviors**
 
-### Gust System
+### Enhanced Gust System
 
-**Natural Gust Distribution:**
-- **Probability-based timing** with minimum 5-second intervals
-- **Moderate-bias strength** (favors realistic over extreme gusts)
-- **Three-phase progression:** Buildup → Sustain → Decay
-- **Activity-aware behavior:** Quiet gusts are gentle and slow, active gusts are sharp and dramatic
+**Realistic Gust Distribution:**
+- **Phase-Appropriate Timing:** Quiet phases have fewer, gentler gusts; High phases have frequent, intense ones
+- **Variable Duration:** 1.5 to 8 seconds with natural distribution (shorter gusts more common)
+- **Dynamic Intensity:** Each gust has random strength within phase-appropriate limits
+- **Natural Shape:** Three-phase progression (buildup → sustain with variation → decay)
 
 ### Fan Speed Calculation
 
-1. **Base Calculation:** `base_speed × breathing_modifier × (1 + oscillation)`
-2. **Gust Application:** Result multiplied by current gust intensity
-3. **Global Scaling:** Applied wind intensity multiplier (30-150%)
-4. **Safety Limits:** Enforced minimum/maximum fan speed boundaries
-5. **PWM Output:** Final percentage converted to PWM signal
+1. **Target Generation:** Random targets within current phase's wind range
+2. **Smooth Transition:** Current wind speed moves toward target at phase-appropriate rate
+3. **Micro-Turbulence:** Phase-specific random fluctuations added continuously
+4. **Gust Application:** Active gust multiplier applied if gust is in progress
+5. **Global Scaling:** Wind intensity multiplier (30-150%) applied
+6. **Safety Limits:** Minimum/maximum fan speed boundaries enforced
+7. **PWM Output:** Final percentage converted to PWM signal
 
 ### Real-Time Monitoring
 
 **Wind Sensors:**
-- **Wind Speed** (MPH) - Current simulated wind velocity
-- **Gust Strength** (%) - Active gust intensity above baseline
-- **Wind Activity** (%) - Current activity mode indicator
-- **Wind Condition** - Human-readable description (e.g., "Gentle breeze with gusts (coastal)")
+- **Wind Speed** (MPH) - Current simulated wind velocity including gusts
+- **Gust Active** (%) - Current gust intensity (0% when no gust active)
+- **Current Weather Phase** - Shows "Quiet Air", "Medium Conditions", or "High Activity"
+- **Wind Condition** - Human-readable description with phase information
+- **Current Wind State** - Shows current behavior ("Wind building", "Gust active", "Phase: 2m remaining")
 
 **System Diagnostics:**
-- **Physics Loop Frequency** (Hz) - Simulation performance monitoring
 - **Fan Running** - Boolean status based on actual PWM output level
 - **Standard ESP32 metrics** - Uptime, WiFi signal, temperature, memory usage
 
@@ -212,26 +247,34 @@ Each preset adjusts multiple atmospheric parameters:
 **Wind simulation not working?**
 - Ensure you're not in Manual mode
 - Check Wind Intensity isn't set too low (minimum 30%)
-- Verify Minimum Oscillation setting provides enough variation
+- Verify Wind Variability setting provides enough movement
 
-**Erratic behavior?**
-- Monitor system logs for parameter clamping warnings
-- Check WiFi signal strength and connection stability
-- Ensure power supply provides adequate current
+**Wind feels too static?**
+- Increase Wind Variability setting (15-25% recommended)
+- Check that weather phases are transitioning (watch "Current Weather Phase" sensor)
+- Monitor "Current Wind State" to understand system behavior
+
+**Too much variation?**
+- Reduce Wind Variability setting
+- Lower Gust Frequency setting
+- Choose a calmer location preset (Countryside, Mediterranean)
 
 ## Tips for Best Experience
 
 - **Start with defaults** - All presets are pre-tuned for natural feel
-- **Adjust gradually** - Small changes in oscillation and intensity have big effects
+- **Adjust gradually** - Small changes in variability and intensity have big effects
 - **Location matters** - Choose presets that match your desired atmosphere
-- **Monitor sensors** - Use the wind condition sensor to understand current behavior
-- **Activity awareness** - The system naturally varies intensity over time
-- **Power scaling** - Use Wind Intensity as a master volume control
+- **Monitor phases** - Watch the weather phase sensor to understand long-term patterns
+- **Phase awareness** - The system naturally creates quiet periods, normal conditions, and stormy phases
+- **Power scaling** - Use Wind Intensity as a master volume control for all effects
+- **Time of day** - Different phases work well for different activities (Quiet for sleeping, High for energizing)
 
 ## Technical Notes
 
-- **Update intervals** adapt dynamically based on selected location
-- **Safety monitoring** prevents parameter drift and system instability  
-- **Minimum oscillation** ensures wind never becomes completely static
-- **Activity cycles** create long-term variation without user intervention
-- **PWM-based status** provides accurate fan operation feedback
+- **Randomized timing** - All update intervals include random variation for natural unpredictability
+- **Phase-based ranges** - Each weather phase operates within different wind speed ranges
+- **Anti-cyclical design** - Eliminates predictable sine wave patterns in favor of target-based randomness
+- **Multi-layered variation** - Combines phase changes, target movement, micro-turbulence, and gusts
+- **Natural distribution** - Favors moderate conditions but allows for dramatic weather events
+- **Maintenance systems** - Automatic nudging prevents the system from getting stuck in static states
+- **Real-time adaptation** - Phase transitions happen organically based on elapsed time and probabilities
