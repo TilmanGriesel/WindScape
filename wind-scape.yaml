@@ -2,7 +2,7 @@ substitutions:
   device_name: "wind-scape"
   friendly_name: "WindScape"
   
-  # PWM Configuration - Optimized for 2000RPM PC fans
+  # PWM Configuration - Optimized for PC fans
   pwm_frequency: "25000Hz"
   pwm_min_power: "0.12"  # Minimum duty cycle to overcome motor startup torque
   
@@ -11,7 +11,7 @@ substitutions:
   fan_speed_max: "100"
   fan_speed_default: "70"
   
-  # Base timing intervals (dynamically adjusted by location presets)
+  # Base timing intervals (adjusted dynamically by location presets)
   base_update_interval: "800ms"
   gust_update_interval: "200ms"
   sensor_update_interval: "1s"
@@ -19,7 +19,7 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: "PWM fan controller featuring simulated wind effects for more realistic airflow behavior. https://github.com/TilmanGriesel/WindScape"
+  comment: "PWM fan controller with realistic wind simulation featuring location-based atmospheric modeling"
 
 esp32:
   board: esp32dev
@@ -79,7 +79,7 @@ fan:
 # ====================================================================================
 
 sensor:
-  # RPM monitoring via pulse counter (hall effect or optical sensor on GPIO27)
+  # Fan RPM monitoring via pulse counter (connect hall effect or optical sensor to GPIO27)
   - platform: pulse_counter
     pin:
       number: GPIO27
@@ -95,7 +95,7 @@ sensor:
     filters:
       - multiply: 0.5  # Adjust based on sensor pulses per revolution
 
-  # Simulated wind speed based on physics calculations
+  # Simulated wind speed based on atmospheric modeling
   - platform: template
     name: "Wind Speed"
     id: wind_speed_sensor
@@ -105,7 +105,7 @@ sensor:
     state_class: "measurement"
     update_interval: ${sensor_update_interval}
 
-  # Current gust intensity as percentage above base wind
+  # Current gust intensity as percentage above baseline
   - platform: template
     name: "Gust Strength"
     id: gust_strength_sensor
@@ -115,7 +115,7 @@ sensor:
     state_class: "measurement"
     update_interval: ${sensor_update_interval}
 
-  # ESP32 system diagnostics
+  # System diagnostics
   - platform: uptime
     name: "${friendly_name} Uptime"
     id: uptime_sensor
@@ -131,7 +131,6 @@ sensor:
     id: cpu_temp_sensor
     update_interval: 30s
 
-  # Memory usage monitoring
   - platform: template
     name: "${friendly_name} Free Heap"
     id: free_heap_sensor
@@ -158,17 +157,17 @@ sensor:
       }
       return 0.0f;
 
-  # Current noise parameters for debugging
+  # Wind oscillation amplitude for debugging
   - platform: template
-    name: "Noise Time Scale"
-    id: noise_scale_sensor
-    unit_of_measurement: "scale"
+    name: "Wind Oscillation"
+    id: wind_oscillation_sensor
+    unit_of_measurement: "amplitude"
     icon: "mdi:chart-line-variant"
-    accuracy_decimals: 4
+    accuracy_decimals: 3
     state_class: "measurement"
     update_interval: 5s
     lambda: |-
-      return id(noise_time_scale);
+      return id(wind_phase_offset);
 
   - platform: template
     name: "Wind Activity"
@@ -216,9 +215,37 @@ number:
     mode: slider
     optimistic: true
 
+  # Minimum baseline wind variation
+  - platform: template
+    name: "Minimum Oscillation"
+    id: minimum_oscillation
+    min_value: 5
+    max_value: 50
+    step: 5
+    initial_value: 5
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:wave"
+    mode: slider
+    optimistic: true
+
+  # Minimum fan speed to prevent complete stops
+  - platform: template
+    name: "Minimum Fan Speed"
+    id: minimum_fan_speed
+    min_value: ${fan_speed_min}
+    max_value: ${fan_speed_max}
+    step: 5
+    initial_value: 15
+    unit_of_measurement: "%"
+    restore_value: true
+    icon: "mdi:speedometer-slow"
+    mode: slider
+    optimistic: true
+
   # Maximum allowed fan speed regardless of simulation
   - platform: template
-    name: "Fan Speed Limit"
+    name: "Maximum Fan Speed"
     id: fan_speed_limit
     min_value: ${fan_speed_min}
     max_value: ${fan_speed_max}
@@ -227,21 +254,7 @@ number:
     unit_of_measurement: "%"
     restore_value: true
     icon: "mdi:speedometer-medium"
-    mode: box
-    optimistic: true
-
-  # Minimum fan speed to prevent complete stops
-  - platform: template
-    name: "Minimum Fan Speed"
-    id: minimum_fan_speed
-    min_value: 0
-    max_value: 50
-    step: 5
-    initial_value: 15
-    unit_of_measurement: "%"
-    restore_value: true
-    icon: "mdi:speedometer-slow"
-    mode: box
+    mode: slider
     optimistic: true
 
 # Location-based wind simulation profiles
@@ -251,20 +264,20 @@ select:
     id: wind_mode_select
     icon: "mdi:weather-partly-cloudy"
     options:
-      - "Plage du Truc Vert"
-      - "Capri"
-      - "Plateau de Valensole"
-      - "Fellhorn"
-      - "Meseta de Somuncurá"
-      - "Nærøyfjord"
+      - "Ocean"
+      - "Mediterranean"
+      - "Countryside"
+      - "Mountains"
+      - "Plains"
+      - "Fjord"
       - "Manual"
-    initial_option: "Plage du Truc Vert"
+    initial_option: "Ocean"
     restore_value: true
     optimistic: true
     on_value:
       - script.execute: handle_mode_change
 
-# Human-readable wind condition description
+# Wind condition descriptions
 text_sensor:
   - platform: template
     name: "Wind Condition"
@@ -282,7 +295,7 @@ text_sensor:
       else if (id(current_activity_mode) == 1) return {"Normal conditions"};
       else return {"Active period"};
       
-  # ESP32 system information
+  # Device information
   - platform: version
     name: "${friendly_name} ESPHome Version"
     
@@ -294,27 +307,18 @@ text_sensor:
     mac_address:
       name: "${friendly_name} MAC Address"
 
-# System status monitoring
+# System status indicators
 binary_sensor:
   - platform: status
     name: "${friendly_name} Status"
     id: connection_status
 
-  # Simulation state indicators
   - platform: template
     name: "${friendly_name} Wind Simulation Active"
     id: simulation_active_sensor
     icon: "mdi:weather-windy"
     lambda: |-
       return id(wind_simulation_active);
-
-  # Fan operational status
-  - platform: template
-    name: "${friendly_name} Fan Running"
-    id: fan_running_sensor
-    icon: "mdi:fan"
-    lambda: |-
-      return id(desk_fan).state;
 
 # ====================================================================================
 # GLOBAL STATE VARIABLES
@@ -327,7 +331,7 @@ globals:
     restore_value: false
     initial_value: 'false'
   
-  # Current wind parameters
+  # Wind parameters
   - id: base_wind_speed
     type: float
     restore_value: false
@@ -343,7 +347,7 @@ globals:
     restore_value: false
     initial_value: '0.0'
     
-  # Physics parameters
+  # Activity modifiers
   - id: turbulence_factor
     type: float
     restore_value: false
@@ -353,18 +357,8 @@ globals:
     type: float
     restore_value: false
     initial_value: '1.0'
-    
-  - id: noise_time_scale
-    type: float
-    restore_value: false
-    initial_value: '0.01'
-    
-  - id: perlin_seed_offset
-    type: float
-    restore_value: false
-    initial_value: '0.0'
 
-  # Dynamic timing intervals (milliseconds)
+  # Timing intervals (milliseconds)
   - id: current_base_interval
     type: int
     restore_value: false
@@ -389,41 +383,37 @@ globals:
   - id: activity_cycle_duration
     type: float
     restore_value: false
-    initial_value: '60.0'  # Default 60 seconds
+    initial_value: '60.0'
+
 # ====================================================================================
-# PHYSICS ENGINE & CORE ALGORITHMS
+# WIND SIMULATION ENGINE
 # ====================================================================================
 
 script:
-  # Optimized 1D Perlin noise implementation for natural wind patterns
-  - id: perlin_noise_1d
+  # Layered sine wave oscillation for natural wind variation
+  - id: calculate_wind_oscillation
     parameters:
-      x: float
+      time: float
+      base_frequency: float
+      variation_frequency: float
     then:
       - lambda: |-
-          float i = floor(x);
-          float f = x - i;
+          // Primary wind oscillation (slow breathing)
+          float primary = sin(time * base_frequency);
           
-          // Pseudo-random gradient hash function
-          auto hash = [](int n) -> float {
-            n = (n << 13) ^ n;
-            return (1.0f - ((n * (n * n * 15731 + 789221) + 1376312589) & 0x7fffffff) / 1073741824.0f);
-          };
+          // Secondary variation (micro-turbulence)
+          float secondary = sin(time * variation_frequency * 3.7f) * 0.4f;
           
-          // Calculate gradients at integer lattice points
-          float g0 = hash((int)i);
-          float g1 = hash((int)i + 1);
+          // Tertiary high-frequency variation (fine turbulence)
+          float tertiary = sin(time * variation_frequency * 11.3f) * 0.15f;
           
-          // Smoothstep interpolation for C2 continuity
-          float u = f * f * (3.0f - 2.0f * f);
-          
-          // Linear interpolation between gradients
-          float noise_value = g0 * (1.0f - u) + g1 * u;
+          // Combine oscillations with different weights
+          float combined = primary + secondary + tertiary;
           
           // Store result in global variable for retrieval
-          id(wind_phase_offset) = noise_value;
+          id(wind_phase_offset) = combined;
 
-  # Fan speed application with safety limits and intensity scaling
+  # Apply fan speed with safety limits and intensity scaling
   - id: apply_fan_speed
     parameters:
       speed_percent: float
@@ -454,7 +444,7 @@ script:
             id(fan_pwm_output).set_level(final_speed);
           }
 
-  # Main wind physics calculation with multi-octave Perlin noise
+  # Main atmospheric physics calculation
   - id: calculate_wind_physics
     then:
       - lambda: |-
@@ -464,13 +454,12 @@ script:
           uint32_t now = millis();
           float t = now / 1000.0f;
           
-          // Check if we need to transition activity modes
+          // Activity cycle management
           if (t - id(activity_cycle_start_time) > id(activity_cycle_duration)) {
-            // Time to change activity mode
             float random_val = (esp_random() % 100) / 100.0f;
             int old_mode = id(current_activity_mode);
             
-            // Weighted probability for next state based on current state
+            // State transition probabilities
             if (id(current_activity_mode) == 0) {        // Currently quiet
               if (random_val < 0.7f) id(current_activity_mode) = 1;      // 70% -> normal
               else id(current_activity_mode) = 2;                        // 30% -> active
@@ -483,7 +472,7 @@ script:
               else id(current_activity_mode) = 0;                        // 40% -> quiet
             }
             
-            // Set new cycle duration based on activity mode and location
+            // Set cycle duration based on activity mode
             if (id(current_activity_mode) == 0) {       // Quiet periods
               id(activity_cycle_duration) = 45.0f + (esp_random() % 60); // 45-105 seconds
             } else if (id(current_activity_mode) == 1) { // Normal periods
@@ -510,7 +499,7 @@ script:
           float gust_buildup_time = 1.5f;
           
           // Location-specific atmospheric modeling
-          if (mode == "Plage du Truc Vert") {
+          if (mode == "Ocean") {
               base_speed = 12.0f;
               breathing_period = 12.0f;
               breathing_amplitude = 0.4f;
@@ -518,10 +507,9 @@ script:
               gust_probability = 0.03f;
               gust_duration = 4.0f;
               gust_buildup_time = 2.0f;
-              id(noise_time_scale) = 0.008f;
               id(current_base_interval) = 1200;
               id(current_gust_interval) = 800;
-          } else if (mode == "Capri") {
+          } else if (mode == "Mediterranean") {
               base_speed = 6.5f;
               breathing_period = 15.0f;
               breathing_amplitude = 0.25f;
@@ -529,10 +517,9 @@ script:
               gust_probability = 0.015f;
               gust_duration = 2.5f;
               gust_buildup_time = 1.0f;
-              id(noise_time_scale) = 0.005f;
               id(current_base_interval) = 1800;
               id(current_gust_interval) = 1200;
-          } else if (mode == "Plateau de Valensole") {
+          } else if (mode == "Countryside") {
               base_speed = 3.5f;
               breathing_period = 20.0f;
               breathing_amplitude = 0.2f;
@@ -540,10 +527,9 @@ script:
               gust_probability = 0.008f;
               gust_duration = 5.0f;
               gust_buildup_time = 3.0f;
-              id(noise_time_scale) = 0.003f;
               id(current_base_interval) = 2500;
               id(current_gust_interval) = 2000;
-          } else if (mode == "Fellhorn") {
+          } else if (mode == "Mountains") {
               base_speed = 11.0f;
               breathing_period = 6.0f;
               breathing_amplitude = 0.6f;
@@ -551,10 +537,9 @@ script:
               gust_probability = 0.05f;
               gust_duration = 2.0f;
               gust_buildup_time = 0.8f;
-              id(noise_time_scale) = 0.012f;
               id(current_base_interval) = 900;
               id(current_gust_interval) = 400;
-          } else if (mode == "Meseta de Somuncurá") {
+          } else if (mode == "Plains") {
               base_speed = 18.0f;
               breathing_period = 10.0f;
               breathing_amplitude = 0.5f;
@@ -562,10 +547,9 @@ script:
               gust_probability = 0.08f;
               gust_duration = 6.0f;
               gust_buildup_time = 1.2f;
-              id(noise_time_scale) = 0.015f;
               id(current_base_interval) = 800;
               id(current_gust_interval) = 300;
-          } else if (mode == "Nærøyfjord") {
+          } else if (mode == "Fjord") {
               base_speed = 14.0f;
               breathing_period = 8.0f;
               breathing_amplitude = 0.7f;
@@ -573,118 +557,109 @@ script:
               gust_probability = 0.06f;
               gust_duration = 3.5f;
               gust_buildup_time = 1.0f;
-              id(noise_time_scale) = 0.010f;
               id(current_base_interval) = 1000;
               id(current_gust_interval) = 500;
           }
           
-          // ACTIVITY MODE MODIFICATIONS
+          // Apply activity mode modifiers
           float activity_multiplier = 1.0f;
           float activity_turbulence_mod = 1.0f;
           float activity_gust_mod = 1.0f;
           
           if (id(current_activity_mode) == 0) {        // Quiet mode
-              activity_multiplier = 0.6f;              // Reduce overall wind
-              activity_turbulence_mod = 0.4f;          // Much less turbulence
-              activity_gust_mod = 0.3f;                // Fewer gusts
-              breathing_amplitude *= 0.5f;             // Gentler breathing
+              activity_multiplier = 0.6f;              
+              activity_turbulence_mod = 0.4f;          
+              activity_gust_mod = 0.3f;                
+              breathing_amplitude *= 0.5f;             
               
               // Location-specific quiet characteristics
-              if (mode == "Plage du Truc Vert") {
-                  // Ocean calm between wave sets
-                  breathing_period *= 1.8f;            // Longer, slower breathing
-              } else if (mode == "Capri") {
-                  // Mediterranean stillness
-                  activity_multiplier = 0.4f;          // Very calm
+              if (mode == "Ocean") {
+                  breathing_period *= 1.8f;            
+              } else if (mode == "Mediterranean") {
+                  activity_multiplier = 0.4f;          
                   breathing_period *= 2.2f;
-              } else if (mode == "Plateau de Valensole") {
-                  // Morning/evening calm in lavender fields
-                  activity_multiplier = 0.3f;          // Almost still
+              } else if (mode == "Countryside") {
+                  activity_multiplier = 0.3f;          
                   breathing_period *= 3.0f;
-              } else if (mode == "Fellhorn") {
-                  // Valley wind lull
+              } else if (mode == "Mountains") {
                   activity_multiplier = 0.5f;
                   breathing_period *= 1.3f;
-              } else if (mode == "Meseta de Somuncurá") {
-                  // Even Patagonia has brief calm moments
-                  activity_multiplier = 0.7f;          // Still substantial
-              } else if (mode == "Nærøyfjord") {
-                  // Fjord pressure equalization
+              } else if (mode == "Plains") {
+                  activity_multiplier = 0.7f;          
+              } else if (mode == "Fjord") {
                   activity_multiplier = 0.5f;
                   breathing_period *= 1.5f;
               }
               
           } else if (id(current_activity_mode) == 2) { // Active mode
-              activity_multiplier = 1.4f;              // Increase overall wind
-              activity_turbulence_mod = 1.8f;          // More turbulence
-              activity_gust_mod = 2.5f;                // More frequent gusts
-              breathing_amplitude *= 1.6f;             // More dramatic breathing
+              activity_multiplier = 1.4f;              
+              activity_turbulence_mod = 1.8f;          
+              activity_gust_mod = 2.5f;                
+              breathing_amplitude *= 1.6f;             
               
               // Location-specific active characteristics
-              if (mode == "Plage du Truc Vert") {
-                  // Ocean storm approach or strong onshore flow
+              if (mode == "Ocean") {
                   activity_multiplier = 1.6f;
-                  breathing_period *= 0.7f;            // Faster, more urgent
-              } else if (mode == "Capri") {
-                  // Thermal activity or sirocco influence
+                  breathing_period *= 0.7f;            
+              } else if (mode == "Mediterranean") {
                   activity_multiplier = 1.5f;
-                  activity_gust_mod = 3.0f;            // Thermal gusts
-              } else if (mode == "Plateau de Valensole") {
-                  // Afternoon thermal activity
+                  activity_gust_mod = 3.0f;            
+              } else if (mode == "Countryside") {
                   activity_multiplier = 1.3f;
                   breathing_period *= 0.8f;
-              } else if (mode == "Fellhorn") {
-                  // Alpine storm or strong valley winds
+              } else if (mode == "Mountains") {
                   activity_multiplier = 1.7f;
-                  activity_gust_mod = 3.5f;            // Dramatic mountain gusts
+                  activity_gust_mod = 3.5f;            
                   breathing_period *= 0.6f;
-              } else if (mode == "Meseta de Somuncurá") {
-                  // Full Patagonian fury
+              } else if (mode == "Plains") {
                   activity_multiplier = 1.8f;
                   activity_gust_mod = 4.0f;
                   breathing_period *= 0.5f;
-              } else if (mode == "Nærøyfjord") {
-                  // Katabatic winds or pressure gradient
+              } else if (mode == "Fjord") {
                   activity_multiplier = 1.6f;
                   activity_gust_mod = 3.2f;
                   breathing_period *= 0.7f;
               }
           }
-          // Normal mode (id 1) uses base parameters unchanged
           
-          // Apply activity modifications
+          // Apply modifications to base parameters
           base_speed *= activity_multiplier;
           micro_turbulence *= activity_turbulence_mod;
           gust_probability *= activity_gust_mod;
           
-          // Store modified parameters for gust calculation
+          // Store parameters for gust calculation
           id(base_wind_speed) = base_speed;
           id(turbulence_factor) = activity_turbulence_mod;
           id(gust_intensity_factor) = activity_gust_mod;
           
-          // BREATHING PATTERN with activity modification
+          // Calculate breathing pattern
           float breathing_phase = sin(t * 2.0f * M_PI / breathing_period);
           float breathing_modifier = 1.0f + breathing_amplitude * breathing_phase;
           
-          // MICRO-TURBULENCE
-          float turbulence_time = t * id(noise_time_scale) * 15.0f;
-          id(perlin_noise_1d).execute(turbulence_time + id(perlin_seed_offset));
-          float micro_turb = id(wind_phase_offset) * micro_turbulence;
+          // Calculate micro-turbulence using layered sine waves
+          float base_freq = 2.0f * M_PI / breathing_period;
+          float variation_freq = base_freq * 0.3f;
+          id(calculate_wind_oscillation).execute(t, base_freq, variation_freq);
           
-          // COMBINE PATTERNS
+          // Apply minimum oscillation setting to ensure baseline variation
+          float min_oscillation = id(minimum_oscillation).state / 100.0f;
+          float oscillation_amplitude = fmax(min_oscillation, micro_turbulence);
+          float micro_turb = id(wind_phase_offset) * oscillation_amplitude;
+          
+          // Combine all wind components
           float current_wind_mph = base_speed * breathing_modifier * (1.0f + micro_turb);
           current_wind_mph = fmax(1.0f, fmin(25.0f, current_wind_mph));
           
           id(wind_speed_sensor).publish_state(current_wind_mph);
           
-          // Convert to fan percentage
+          // Convert to fan percentage and apply gust multiplier
           float fan_speed_percent = 15.0f + (current_wind_mph - 1.0f) * (75.0f / 19.0f);
           fan_speed_percent = fmax(15, fmin(90, fan_speed_percent));
           fan_speed_percent *= id(current_gust_multiplier);
           
           id(apply_fan_speed).execute(fan_speed_percent);
 
-  # Gust pattern generation using Perlin noise for natural randomness
+  # Gust generation with natural timing and intensity distribution
   - id: calculate_gusts
     then:
       - lambda: |-
@@ -698,38 +673,38 @@ script:
           static float gust_start_time = 0;
           static bool gust_active = false;
           
-          // Get location-specific gust parameters
-          float gust_probability = 0.02f;    // Base probability per cycle
+          // Location-specific gust parameters
+          float gust_probability = 0.02f;
           float gust_duration = 3.0f;
           float gust_buildup_time = 1.5f;
           float max_gust_strength = 1.8f;
           
-          if (mode == "Plage du Truc Vert") {
+          if (mode == "Ocean") {
               gust_probability = 0.03f;
               gust_duration = 4.0f;
               gust_buildup_time = 2.0f;
               max_gust_strength = 2.0f;
-          } else if (mode == "Capri") {
+          } else if (mode == "Mediterranean") {
               gust_probability = 0.015f;
               gust_duration = 2.5f;
               gust_buildup_time = 1.0f;
               max_gust_strength = 1.6f;
-          } else if (mode == "Plateau de Valensole") {
+          } else if (mode == "Countryside") {
               gust_probability = 0.008f;
               gust_duration = 5.0f;
               gust_buildup_time = 3.0f;
               max_gust_strength = 1.4f;
-          } else if (mode == "Fellhorn") {
+          } else if (mode == "Mountains") {
               gust_probability = 0.05f;
               gust_duration = 2.0f;
               gust_buildup_time = 0.8f;
               max_gust_strength = 2.3f;
-          } else if (mode == "Meseta de Somuncurá") {
+          } else if (mode == "Plains") {
               gust_probability = 0.08f;
               gust_duration = 6.0f;
               gust_buildup_time = 1.2f;
               max_gust_strength = 2.5f;
-          } else if (mode == "Nærøyfjord") {
+          } else if (mode == "Fjord") {
               gust_probability = 0.06f;
               gust_duration = 3.5f;
               gust_buildup_time = 1.0f;
@@ -740,92 +715,82 @@ script:
           gust_probability *= id(gust_intensity_factor);
           
           if (id(current_activity_mode) == 0) {        // Quiet mode
-              gust_duration *= 1.5f;                   // Longer, gentler gusts
-              gust_buildup_time *= 2.0f;               // Slower buildup
-              max_gust_strength *= 0.7f;               // Weaker gusts
+              gust_duration *= 1.5f;                   
+              gust_buildup_time *= 2.0f;               
+              max_gust_strength *= 0.7f;               
               
-              // Location-specific quiet gust modifications
-              if (mode == "Plage du Truc Vert") {
-                  // Ocean calm - very gentle, rolling gusts
-                  gust_duration *= 2.0f;               // Long, rolling ocean swells
-                  max_gust_strength *= 0.6f;           // Very gentle
-              } else if (mode == "Capri") {
-                  // Mediterranean quiet - barely perceptible
-                  gust_duration *= 3.0f;               // Very long, gentle movements
-                  max_gust_strength *= 0.5f;           // Minimal strength
-              } else if (mode == "Plateau de Valensole") {
-                  // Lavender field calm - almost imperceptible
-                  gust_duration *= 4.0f;               // Very slow movements
-                  max_gust_strength *= 0.4f;           // Barely noticeable
-              } else if (mode == "Fellhorn") {
-                  // Mountain valley lull - still some character
-                  gust_duration *= 1.2f;               // Slightly longer
-                  max_gust_strength *= 0.8f;           // Still has some mountain character
-              } else if (mode == "Meseta de Somuncurá") {
-                  // Patagonian "calm" - still significant by other standards
+              // Location-specific quiet gust characteristics
+              if (mode == "Ocean") {
+                  gust_duration *= 2.0f;               
+                  max_gust_strength *= 0.6f;           
+              } else if (mode == "Mediterranean") {
+                  gust_duration *= 3.0f;               
+                  max_gust_strength *= 0.5f;           
+              } else if (mode == "Countryside") {
+                  gust_duration *= 4.0f;               
+                  max_gust_strength *= 0.4f;           
+              } else if (mode == "Mountains") {
+                  gust_duration *= 1.2f;               
+                  max_gust_strength *= 0.8f;           
+              } else if (mode == "Plains") {
                   gust_duration *= 1.3f;               
-                  max_gust_strength *= 0.9f;           // Even quiet Patagonia has character
-              } else if (mode == "Nærøyfjord") {
-                  // Fjord pressure equalization - gradual changes
+                  max_gust_strength *= 0.9f;           
+              } else if (mode == "Fjord") {
                   gust_duration *= 1.8f;               
                   max_gust_strength *= 0.7f;           
               }
               
           } else if (id(current_activity_mode) == 2) { // Active mode
-              gust_duration *= 0.8f;                   // Shorter, sharper gusts
-              gust_buildup_time *= 0.6f;               // Faster buildup
-              max_gust_strength *= 1.3f;               // Stronger gusts
+              gust_duration *= 0.8f;                   
+              gust_buildup_time *= 0.6f;               
+              max_gust_strength *= 1.3f;               
               
-              // Location-specific active gust modifications
-              if (mode == "Plage du Truc Vert") {
-                  // Atlantic storm conditions - powerful, sustained
-                  gust_duration *= 1.2f;               // Sustained ocean gusts
-                  max_gust_strength *= 1.4f;           // Strong oceanic power
-                  gust_buildup_time *= 0.8f;           // Builds like incoming waves
-              } else if (mode == "Capri") {
-                  // Mediterranean thermal activity - quick, sharp
-                  gust_duration *= 0.7f;               // Quick thermal bursts
-                  max_gust_strength *= 1.2f;           // Moderate intensity
-                  gust_buildup_time *= 0.5f;           // Sudden thermal response
-              } else if (mode == "Plateau de Valensole") {
-                  // Afternoon thermal activity - gentle but noticeable
+              // Location-specific active gust characteristics
+              if (mode == "Ocean") {
+                  gust_duration *= 1.2f;               
+                  max_gust_strength *= 1.4f;           
+                  gust_buildup_time *= 0.8f;           
+              } else if (mode == "Mediterranean") {
+                  gust_duration *= 0.7f;               
+                  max_gust_strength *= 1.2f;           
+                  gust_buildup_time *= 0.5f;           
+              } else if (mode == "Countryside") {
                   gust_duration *= 0.9f;               
-                  max_gust_strength *= 1.1f;           // Still relatively gentle
+                  max_gust_strength *= 1.1f;           
                   gust_buildup_time *= 0.7f;           
-              } else if (mode == "Fellhorn") {
-                  // Alpine storm fury - dramatic and sudden
-                  gust_duration *= 0.6f;               // Sharp mountain gusts
-                  max_gust_strength *= 1.6f;           // Dramatic alpine power
-                  gust_buildup_time *= 0.4f;           // Sudden mountain blasts
-              } else if (mode == "Meseta de Somuncurá") {
-                  // Full Patagonian fury - relentless and powerful
-                  gust_duration *= 1.0f;               // Sustained power
-                  max_gust_strength *= 1.8f;           // Maximum intensity
-                  gust_buildup_time *= 0.5f;           // Quick, powerful surges
-              } else if (mode == "Nærøyfjord") {
-                  // Katabatic winds and pressure gradients - channeled power
-                  gust_duration *= 0.8f;               // Sharp pressure changes
-                  max_gust_strength *= 1.5f;           // Channeled fjord power
-                  gust_buildup_time *= 0.6f;           // Sudden pressure shifts
+              } else if (mode == "Mountains") {
+                  gust_duration *= 0.6f;               
+                  max_gust_strength *= 1.6f;           
+                  gust_buildup_time *= 0.4f;           
+              } else if (mode == "Plains") {
+                  gust_duration *= 1.0f;               
+                  max_gust_strength *= 1.8f;           
+                  gust_buildup_time *= 0.5f;           
+              } else if (mode == "Fjord") {
+                  gust_duration *= 0.8f;               
+                  max_gust_strength *= 1.5f;           
+                  gust_buildup_time *= 0.6f;           
               }
           }
-          // Normal mode (id 1) uses base parameters unchanged
           
-          // Apply user gust frequency preference
-          float user_gust_freq = id(gust_frequency).state / 100.0f;
+          // Apply user gust frequency preference (0.5x to 2.0x range)
+          float user_gust_freq = 0.5f + (id(gust_frequency).state / 100.0f) * 1.5f;
           gust_probability *= user_gust_freq;
           
-          // Check if we should start a new gust
-          if (!gust_active && (t - last_gust_time) > 2.0f) {  // Minimum 2s between gusts
-              float random_val = (esp_random() % 1000) / 1000.0f;
+          // Check if we should start a new gust (reduced base frequency for more natural feel)
+          if (!gust_active && (t - last_gust_time) > 5.0f) {  // Minimum 5s between gusts
+              float random_val = (esp_random() % 10000) / 10000.0f;
               if (random_val < gust_probability) {
                   // Start new gust
                   gust_active = true;
                   gust_start_time = t;
-                  gust_target = 1.0f + ((esp_random() % 100) / 100.0f) * (max_gust_strength - 1.0f);
+                  
+                  // More natural gust strength distribution (favor moderate gusts)
+                  float strength_random = (esp_random() % 100) / 100.0f;
+                  float strength_curve = pow(strength_random, 0.7f); // Bias toward moderate values
+                  gust_target = 1.0f + strength_curve * (max_gust_strength - 1.0f);
                   last_gust_time = t;
                   
-                  // Log with activity context
                   std::string activity_names[] = {"quiet", "normal", "active"};
                   ESP_LOGI("wind", "Starting %s gust: strength=%.2f, duration=%.1fs, buildup=%.1fs", 
                            activity_names[id(current_activity_mode)].c_str(), 
@@ -833,23 +798,20 @@ script:
               }
           }
           
-          // Handle active gust
+          // Handle active gust progression
           if (gust_active) {
               float gust_age = t - gust_start_time;
               
               if (gust_age < gust_buildup_time) {
-                  // Building up phase - smooth acceleration
+                  // Building up phase
                   float buildup_progress = gust_age / gust_buildup_time;
                   
-                  // Different buildup curves based on activity mode
-                  if (id(current_activity_mode) == 0) {        // Quiet - very gradual
-                      // Gentle S-curve for smooth, natural buildup
+                  // Activity-dependent buildup curves
+                  if (id(current_activity_mode) == 0) {        // Quiet - gradual
                       buildup_progress = buildup_progress * buildup_progress * (3.0f - 2.0f * buildup_progress);
                   } else if (id(current_activity_mode) == 2) { // Active - sharp
-                      // Exponential curve for sudden, dramatic buildup
                       buildup_progress = 1.0f - exp(-3.0f * buildup_progress);
                   } else {                                     // Normal - standard
-                      // Cubic ease-out for natural feel
                       buildup_progress = 1.0f - pow(1.0f - buildup_progress, 3.0f);
                   }
                   
@@ -857,35 +819,34 @@ script:
                   id(current_gust_multiplier) = current_target;
                   
               } else if (gust_age < gust_duration) {
-                  // Sustain phase - hold near peak with slight variation
+                  // Sustain phase
                   float sustain_time = gust_age - gust_buildup_time;
                   float sustain_variation = 0.0f;
                   
                   // Activity-dependent sustain patterns
-                  if (id(current_activity_mode) == 0) {        // Quiet - very stable
-                      sustain_variation = sin(sustain_time * 1.5f) * 0.05f;  // Minimal variation
+                  if (id(current_activity_mode) == 0) {        // Quiet - stable
+                      sustain_variation = sin(sustain_time * 1.5f) * 0.05f;
                   } else if (id(current_activity_mode) == 2) { // Active - turbulent
-                      // More complex variation with multiple frequencies
                       sustain_variation = sin(sustain_time * 4.0f) * 0.12f + 
                                         sin(sustain_time * 7.0f) * 0.08f;
                   } else {                                     // Normal - moderate
-                      sustain_variation = sin(sustain_time * 3.0f) * 0.1f;  // Standard variation
+                      sustain_variation = sin(sustain_time * 3.0f) * 0.1f;
                   }
                   
                   id(current_gust_multiplier) = gust_target + sustain_variation;
                   
               } else {
-                  // Decay phase - return to baseline
+                  // Decay phase
                   float decay_time = gust_age - gust_duration;
                   float decay_factor = 0.0f;
                   
                   // Activity-dependent decay patterns
-                  if (id(current_activity_mode) == 0) {        // Quiet - very gradual
-                      decay_factor = exp(-decay_time * 1.0f);  // Slow, gentle decay
-                  } else if (id(current_activity_mode) == 2) { // Active - quick drop
-                      decay_factor = exp(-decay_time * 3.0f);  // Fast decay
+                  if (id(current_activity_mode) == 0) {        // Quiet - gradual
+                      decay_factor = exp(-decay_time * 1.0f);
+                  } else if (id(current_activity_mode) == 2) { // Active - quick
+                      decay_factor = exp(-decay_time * 3.0f);
                   } else {                                     // Normal - standard
-                      decay_factor = exp(-decay_time * 2.0f);  // Standard decay
+                      decay_factor = exp(-decay_time * 2.0f);
                   }
                   
                   id(current_gust_multiplier) = 1.0f + (gust_target - 1.0f) * decay_factor;
@@ -898,7 +859,7 @@ script:
                   }
               }
           } else {
-              // No active gust - ensure we're at baseline
+              // No active gust - ensure baseline
               id(current_gust_multiplier) = 1.0f;
           }
           
@@ -906,7 +867,7 @@ script:
           float gust_percent = (id(current_gust_multiplier) - 1.0f) * 100.0f;
           id(gust_strength_sensor).publish_state(fmax(0, gust_percent));
 
-  # Generate human-readable wind condition descriptions
+  # Generate descriptive wind condition text
   - id: update_wind_description
     then:
       - lambda: |-
@@ -944,17 +905,17 @@ script:
           }
           
           // Add location context
-          if (mode == "Plage du Truc Vert") {
-            description += " (Atlantic)";
-          } else if (mode == "Capri") {
+          if (mode == "Ocean") {
+            description += " (coastal)";
+          } else if (mode == "Mediterranean") {
             description += " (Mediterranean)";
-          } else if (mode == "Plateau de Valensole") {
-            description += " (country side)";
-          } else if (mode == "Fellhorn") {
-            description += " (Alpine)";
-          } else if (mode == "Meseta de Somuncurá") {
-            description += " (Patagonian)";
-          } else if (mode == "Nærøyfjord") {
+          } else if (mode == "Countryside") {
+            description += " (countryside)";
+          } else if (mode == "Mountains") {
+            description += " (alpine)";
+          } else if (mode == "Plains") {
+            description += " (plains)";
+          } else if (mode == "Fjord") {
             description += " (fjord)";
           }
           
@@ -964,7 +925,7 @@ script:
 # SIMULATION CONTROL & MODE MANAGEMENT
 # ====================================================================================
 
-  # Handle wind mode changes with proper cleanup and initialization
+  # Handle wind mode changes with proper state management
   - id: handle_mode_change
     then:
       - lambda: |-
@@ -979,13 +940,12 @@ script:
           // Reset wind state
           id(current_gust_multiplier) = 1.0f;
           id(gust_strength_sensor).publish_state(0);
-          id(perlin_seed_offset) = (esp_random() % 1000) / 10.0f;
           
           // Reset intervals to defaults
           id(current_base_interval) = 800;
           id(current_gust_interval) = 200;
           
-          ESP_LOGI("wind", "Generated new noise seed: %.1f", id(perlin_seed_offset));
+          ESP_LOGI("wind", "Wind simulation reset");
       - delay: 300ms
       - if:
           condition:
@@ -1004,7 +964,7 @@ script:
             - output.turn_off: fan_pwm_output
             - lambda: 'ESP_LOGI("wind", "Manual mode activated");'
 
-  # Main physics simulation loop with dynamic timing
+  # Main physics simulation loop
   - id: wind_physics_loop
     mode: restart
     then:
@@ -1017,7 +977,7 @@ script:
             - script.execute: update_wind_description
             - delay: !lambda "return id(current_base_interval);"
 
-  # Gust calculation loop running at higher frequency
+  # Gust calculation loop
   - id: gust_calculation_loop
     mode: restart
     then:
@@ -1029,66 +989,20 @@ script:
             - delay: !lambda "return id(current_gust_interval);"
 
 # ====================================================================================
-# USER INTERACTION BUTTONS
+# USER INTERFACE
 # ====================================================================================
 
 button:
-  # Manual gust trigger for immediate effect
-  - platform: template
-    name: "Quick Gust"
-    id: trigger_gust_button
-    icon: "mdi:weather-windy"
-    on_press:
-      - if:
-          condition:
-            lambda: 'return id(wind_simulation_active);'
-          then:
-            - lambda: |-
-                float gust_strength = 1.5f + ((esp_random() % 70) / 100.0f);
-                id(current_gust_multiplier) = gust_strength;
-                float gust_percent = (gust_strength - 1.0f) * 100.0f;
-                id(gust_strength_sensor).publish_state(gust_percent);
-                ESP_LOGI("wind", "Manual gust triggered: %.2f", gust_strength);
-
-  # Force calm conditions temporarily
-  - platform: template
-    name: "Calm Wind"
-    id: calm_wind_button
-    icon: "mdi:weather-windy-variant"
-    on_press:
-      - if:
-          condition:
-            lambda: 'return id(wind_simulation_active);'
-          then:
-            - lambda: |-
-                id(current_gust_multiplier) = 0.7f;
-                id(gust_strength_sensor).publish_state(0);
-                ESP_LOGI("wind", "Calm period triggered");
-
-  # System diagnostics and restart
   - platform: restart
     name: "${friendly_name} Restart"
     id: restart_button
 
-  # Reset wind simulation with new noise seed
-  - platform: template
-    name: "Regenerate Wind Pattern"
-    id: regenerate_pattern_button
-    icon: "mdi:refresh"
-    on_press:
-      - lambda: |-
-          if (id(wind_simulation_active)) {
-            // Generate new noise seed for pattern variation
-            id(perlin_seed_offset) = (esp_random() % 1000) / 10.0f;
-            ESP_LOGI("wind", "New wind pattern generated with seed: %.1f", id(perlin_seed_offset));
-          }
-
 # ====================================================================================
-# SYSTEM MAINTENANCE & MONITORING
+# SYSTEM MAINTENANCE
 # ====================================================================================
 
 interval:
-  # Periodic system health checks and parameter validation
+  # System health monitoring
   - interval: 30s
     then:
       - lambda: |-
