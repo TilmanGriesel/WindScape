@@ -71,67 +71,41 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 - **Feel:** Whatever you choose
 - **Experience:** Full control. No simulation, just direct manual speed adjustment, great for testing, automations or when you want a consistent fan output without variation.
 
-## Quick Setup
+## Build Instructions & Hardware Setup
 
 ### Hardware
-- ESP32 development board (Lolin32 Lite recommended)
-- 4-pin PWM fan (like the Noctua NV-FS1) https://noctua.at/en/nv-fs1
+- ESP32 development board (Lolin32 Lite recommended) around 6 Euros
 - 12V power supply
 - Optional: buck converter for 5V ESP32 power, the ESP32 can be powered by USB too.
 
-**Alternative DIY NV-FS1:**
+### FAN
+- 4-pin PWM desk and room fan (like the Noctua NV-FS1) https://noctua.at/en/nv-fs1
+
+#### DIY NV-FS1 Desk and Room Fan
+You can safe a bit of money and just print and build your own NV-FS1 with the NA-AA1-12 airflow amplifier. Here are some links:
 - https://www.printables.com/model/1324299-pc-desk-fan
 - https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
+- https://noctua.at/en/nf-a12x25-pwm
+- https://noctua.at/en/nv-aa1-12
+
+#### BOM
+Two simplified BOM options with single-fan variant and ~ total costs:
+
+| Item                            | Setup A: NV‑FS1 Kit Route (€)                      | Setup B: DIY Build (€)    |
+| ------------------------------- | -------------------------------------------------- | ------------------------- |
+| NV‑FS1 Desk/Room Fan Kit        | **99.90** (MSRP)                                   | –                         |
+| ESP32 (Lolin32 Lite)            | 8.21                                               | 8.21                      |
+| Buck Converter (12 → 5 V)       | 4.00 (Mini‑Buck) approximate                       | 4.00                      |
+| 4‑pin PWM fan cable (extension) | 2.95 (estimated)                                   | 2.95                      |
+| Pull‑up & filter components     | 1.00 (estimated)                                   | 1.00                      |
+| **Noctua NF‑A12x25 PWM fan**    | Included in kit                                    | 35.50 (average EU price)  |
+| **NV‑AA1‑12 airflow amplifier** | Included in kit                                    | 14.90                     |
+| 3D‑printed mount & hardware     | –                                                  | 5.00                      |
+| 12 V Power Supply               | Included in kit                                    | 7.00                      |
+| **Total Estimated Cost**        | **€116.06**                                        | **€78.56**                |
+| **Savings with DIY Build**      | **–**                                              | **€37.50 less**           |
 
 ### Wiring Diagram
-
-#### With Buck Converter
-
-```
-+-----------------------------+
-|      12V Power Supply       |
-|                             |
-|   +12V ─────┬────────────┐  |
-|             │            │
-|             ▼            │
-|   [Buck Converter]       │
-|    In: 12V   Out: 5V     │
-|        │         │       │
-|        ▼         ▼       │
-|      GND       +5V       │
-|        │         │       │
-+--------┴────┬────┘       │
-              ▼            ▼
-       +------------------------+
-       |      Lolin32 Lite      |
-       |        (ESP32)         |
-       |                        |
-       | VIN ◄────────────── 5V from buck converter
-       | GND ◄────────────── GND from buck converter
-       |                        |
-       | GPIO14 ─────┐          |
-       |             └─────► PWM (Fan Pin 4, Blue)
-       |                        |
-       | GPIO27 ◄────┬──────── TACH (Fan Pin 3, Yellow)
-       |             │
-       |        [10kΩ pull-up to 3.3V]
-       |             │
-       |         [3.3kΩ] in series
-       |             │
-       |        [0.1nF cap to GND] ◄──(RC filter)
-       +------------------------+
-                     │
-                     ▼
-           +------------------------+
-           |       Noctua Fan       |
-           |         4-pin          |
-           |                        |
-           | Pin 1 (Black): GND ◄────── GND from PSU
-           | Pin 2 (Red):  +12V ◄────── +12V from PSU
-           | Pin 3 (Yellow): TACH ─────► GPIO27 (via RC & pull-up)
-           | Pin 4 (Blue):   PWM ◄───── GPIO14
-           +------------------------+
-```
 
 #### USB Powered
 
@@ -175,6 +149,54 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
            |         4-pin          |
            |                        |
            | Pin 1 (Black): GND ◄────── Shared GND (PSU + ESP32)
+           | Pin 2 (Red):  +12V ◄────── +12V from PSU
+           | Pin 3 (Yellow): TACH ─────► GPIO27 (via RC & pull-up)
+           | Pin 4 (Blue):   PWM ◄───── GPIO14
+           +------------------------+
+```
+
+#### With Buck Converter
+
+```
++-----------------------------+
+|      12V Power Supply       |
+|                             |
+|   +12V ─────┬────────────┐  |
+|             │            │
+|             ▼            │
+|   [Buck Converter]       │
+|    In: 12V   Out: 5V     │
+|        │         │       │
+|        ▼         ▼       │
+|      GND       +5V       │
+|        │         │       │
++--------┴────┬────┘       │
+              ▼            ▼
+       +------------------------+
+       |      Lolin32 Lite      |
+       |        (ESP32)         |
+       |                        |
+       | VIN ◄────────────── 5V from buck converter
+       | GND ◄────────────── GND from buck converter
+       |                        |
+       | GPIO14 ─────┐          |
+       |             └─────► PWM (Fan Pin 4, Blue)
+       |                        |
+       | GPIO27 ◄────┬──────── TACH (Fan Pin 3, Yellow)
+       |             │
+       |        [10kΩ pull-up to 3.3V]
+       |             │
+       |         [3.3kΩ] in series
+       |             │
+       |        [0.1nF cap to GND] ◄──(RC filter)
+       +------------------------+
+                     │
+                     ▼
+           +------------------------+
+           |       Noctua Fan       |
+           |         4-pin          |
+           |                        |
+           | Pin 1 (Black): GND ◄────── GND from PSU
            | Pin 2 (Red):  +12V ◄────── +12V from PSU
            | Pin 3 (Yellow): TACH ─────► GPIO27 (via RC & pull-up)
            | Pin 4 (Blue):   PWM ◄───── GPIO14
@@ -337,3 +359,6 @@ Each preset adjusts multiple atmospheric parameters for each phase:
 - **Natural distribution** - Favors moderate conditions but allows for dramatic weather events
 - **Maintenance systems** - Automatic nudging prevents the system from getting stuck in static states
 - **Real-time adaptation** - Phase transitions happen organically based on elapsed time and probabilities
+
+## Roadmap
+- Explore connection to https://github.com/remvze/moodist
