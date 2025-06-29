@@ -89,7 +89,7 @@ You can safe a bit of money and just print and build your own NV-FS1 with the NA
 - https://noctua.at/en/nv-aa1-12
 
 #### BOM
-Two simplified BOM options with single-fan variant and ~ total costs:
+Two simplified BOM options with one KIT version and a DIY build variant:
 
 | Item                            | Setup A: NV‑FS1 Kit Route (€)                      | Setup B: DIY Build (€)    |
 | ------------------------------- | -------------------------------------------------- | ------------------------- |
