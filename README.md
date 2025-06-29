@@ -75,7 +75,6 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 
 ### Hardware
 - ESP32 development board (Lolin32 Lite recommended)
-- Fan controller (like the Noctua NA-FC1) https://noctua.at/en/na-fc1
 - 4-pin PWM fan (like the Noctua NV-FS1) https://noctua.at/en/nv-fs1
 - 12V power supply
 - Optional: buck converter for 5V ESP32 power, the ESP32 can be powered by USB too.
@@ -101,18 +100,8 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
                       |              └──► PWM to NA-FC1 Pin 3
                       |  GPIO27 ◄──────── TACH from NA-FC1 Pin 4
                       |  GND ───────────► shared GND
-                      |  VIN ◄── 5V from buck converter (optional)
+                      |  VIN ◄── 5V from buck converter (optional) or USB power supply 
                       +-----------------+
-                                 │
-                                 ▼
-        +-------------------------------------------+
-        |                NA-FC1                     |
-        |                                           |
-        |  Pin 1: GND ◄────── shared GND ───────────┘
-        |  Pin 2: +12V ◄───── from 12V power supply
-        |  Pin 3: PWM ◄────── from ESP32 GPIO14
-        |  Pin 4: TACH ──────► to ESP32 GPIO27
-        +-------------------------------------------+
                                  │
                                  ▼
                           +-------------+
