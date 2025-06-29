@@ -84,31 +84,101 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 - https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
 
 ### Wiring Diagram
-```
-        +-----------------------------+
-        |      12V Power Supply       |
-        |                             |
-        |   +12V ─────┬────────────┐  |
-        |   GND  ─────┴────┐       │  |
-        +------------------│-------│--+
-                           │       │
-                      +----▼-------▼----+
-                      |   Lolin32 Lite  |
-                      |     (ESP32)     |
-                      |                 |
-                      |  GPIO14 ─────┐  |
-                      |              └──► PWM to NA-FC1 Pin 3
-                      |  GPIO27 ◄──────── TACH from NA-FC1 Pin 4
-                      |  GND ───────────► shared GND
-                      |  VIN ◄── 5V from buck converter (optional) or USB power supply 
-                      +-----------------+
-                                 │
-                                 ▼
-                          +-------------+
-                          |  Noctua Fan |
-                          |   (4-pin)   |
-                          +-------------+
 
+#### With Buck Converter
+
+```
++-----------------------------+
+|      12V Power Supply       |
+|                             |
+|   +12V ─────┬────────────┐  |
+|             │            │
+|             ▼            │
+|   [Buck Converter]       │
+|    In: 12V   Out: 5V     │
+|        │         │       │
+|        ▼         ▼       │
+|      GND       +5V       │
+|        │         │       │
++--------┴────┬────┘       │
+              ▼            ▼
+       +------------------------+
+       |      Lolin32 Lite      |
+       |        (ESP32)         |
+       |                        |
+       | VIN ◄────────────── 5V from buck converter
+       | GND ◄────────────── GND from buck converter
+       |                        |
+       | GPIO14 ─────┐          |
+       |             └─────► PWM (Fan Pin 4, Blue)
+       |                        |
+       | GPIO27 ◄────┬──────── TACH (Fan Pin 3, Yellow)
+       |             │
+       |        [10kΩ pull-up to 3.3V]
+       |             │
+       |         [3.3kΩ] in series
+       |             │
+       |        [0.1nF cap to GND] ◄──(RC filter)
+       +------------------------+
+                     │
+                     ▼
+           +------------------------+
+           |       Noctua Fan       |
+           |         4-pin          |
+           |                        |
+           | Pin 1 (Black): GND ◄────── GND from PSU
+           | Pin 2 (Red):  +12V ◄────── +12V from PSU
+           | Pin 3 (Yellow): TACH ─────► GPIO27 (via RC & pull-up)
+           | Pin 4 (Blue):   PWM ◄───── GPIO14
+           +------------------------+
+```
+
+#### USB Powered
+
+```
++-----------------------------+
+|      12V Power Supply       |
+|                             |
+|   +12V ─────┬────────────┐  |
+|             │            │
+|             ▼            │
+|   [Buck Converter]       │
+|    In: 12V   Out: 5V     │
+|        │         │       │
+|        ▼         ▼       │
+|      GND       +5V       │
+|        │         │       │
++--------┴─────────┴───────┘
+
+           +------------------------+
+           |      Lolin32 Lite      |
+           |        (ESP32)         |
+           |                        |
+           | USB ◄─────── USB 5V from host (PC/power)
+           | GND ◄─────── Shared GND with PSU & fan
+           |                        |
+           | GPIO14 ─────┐          |
+           |             └─────► PWM (Fan Pin 4, Blue)
+           |                        |
+           | GPIO27 ◄────┬──────── TACH (Fan Pin 3, Yellow)
+           |             │
+           |        [10kΩ pull-up to 3.3V]
+           |             │
+           |         [3.3kΩ] in series
+           |             │
+           |        [0.1nF cap to GND] ◄──(RC filter)
+           +------------------------+
+                     │
+                     ▼
+           +------------------------+
+           |       Noctua Fan       |
+           |         4-pin          |
+           |                        |
+           | Pin 1 (Black): GND ◄────── Shared GND (PSU + ESP32)
+           | Pin 2 (Red):  +12V ◄────── +12V from PSU
+           | Pin 3 (Yellow): TACH ─────► GPIO27 (via RC & pull-up)
+           | Pin 4 (Blue):   PWM ◄───── GPIO14
+           +------------------------+
 ```
 
 **References:**
