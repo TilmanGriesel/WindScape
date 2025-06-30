@@ -242,7 +242,7 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 - **Anti-Stagnation:** Multiple overlapping systems ensure continuous movement and variation
 
 **Weather Phase System:**
-WindScape now features three distinct weather phases that create natural atmospheric cycles:
+WindScape features three distinct weather phases that create natural atmospheric cycles:
 
 #### 1. Quiet Air Phase (90-210 seconds)
 - **Wind Range:** 30% to 40% of location's base range
@@ -308,19 +308,20 @@ Each preset adjusts multiple atmospheric parameters for each phase:
 - **Current Wind State** - Shows current behavior ("Wind building", "Gust active", "Phase: 2m remaining")
 
 **System Diagnostics:**
-- **Fan Running** - Boolean status based on actual PWM output level
 - **Standard ESP32 metrics** - Uptime, WiFi signal, temperature, memory usage
 
 ## Troubleshooting
 
 **Fan not responding?**
-- Check PWM connections (GPIO14) and ensure 25kHz compatibility
-- Verify 12V power supply to fan controller
-- Check minimum fan speed setting isn't too low
+- Verify PWM signal is correctly connected to the appropriate GPIO pin and supports 25 kHz operation; adjust configuration if necessary.
+- Ensure the fan controller is receiving a stable 12 V power supply.
+- Confirm the minimum fan speed setting is not set too low.
+- Check the fan’s minimum duty cycle—some models require at least 20%, or even up to 70%, to start operating.
+- Some fans may require an initial higher speed (“kick-start”) before they can be controlled at lower speeds.
 
 **No RPM reading?**
-- Verify tachometer wiring (GPIO27) and internal pullup
-- Confirm fan controller provides tach signal output
+- Verify tachometer wiring GPIO pin and internal pullup
+- Confirm fan provides tach signal output (Yellow wire)
 - Adjust pulse counter multiplier for your specific fan
 
 **Wind simulation not working?**
