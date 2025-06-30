@@ -265,10 +265,9 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 - **Start with defaults** - All presets are pre-tuned for natural feel
 - **Adjust gradually** - Small changes in variability and intensity have big effects
 - **Location matters** - Choose presets that match your desired atmosphere
-- **Monitor phases** - Watch the weather phase sensor to understand long-term patterns
-- **Phase awareness** - The system naturally creates quiet periods, normal conditions, and stormy phases
+- **Monitor phases** - Watch the weather phase sensor to understand long-term patterns, test every pattern for 10 minutes to get a feel.
+- **Phase awareness** - WindScape naturally creates quiet periods, normal conditions, and stormy phases
 - **Power scaling** - Use Wind Intensity as a master volume control for all effects
-- **Time of day** - Different phases work well for different activities (Quiet for sleeping, High for energizing)
 
 ## Technical Notes
 
@@ -286,8 +285,6 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 ---
 
 # How WindScape Works
-
-**WindScape** delivers authentic wind experiences through an advanced atmospheric simulation engine that replicates natural weather patterns with dynamic phases and organic variation.
 
 ## Core Wind Engine
 
