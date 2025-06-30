@@ -4,7 +4,6 @@ WindScape is a Home Assistant ESPHome project that transforms ordinary PC fans i
 The main goal is to create realistic, location-inspired wind patterns that mimic the feeling of natural outdoor breezes - from gentle Mediterranean coastal winds to dramatic Alpine gusts - bringing a more organic and soothing airflow experience to your indoor workspace.
 
 ## Features
-
 - **Randomized Wind Simulation Engine** with natural weather phases
 - **6 Location Presets** inspired by real-world locations
 - **100-level speed control**
@@ -204,6 +203,9 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 **References:**
 - WEMOS LOLIN32 Lite Pinout: https://www.espboards.dev/esp32/lolin32/
 - Wiring example: https://raw.githubusercontent.com/wiki/KlausMu/esp32-fan-controller/images/fritzingESP32_BME280_fan.png
+
+
+![setup](https://raw.githubusercontent.com/TilmanGriesel/WindScape/843b6eca3a42019fdb35a68ddca5e0dcae5bd2b5/docs/title.png?raw=true)
 
 ![breadboard](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img1.png?raw=true)
 
