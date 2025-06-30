@@ -231,87 +231,6 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 **System Controls:**
 - **Restart** - Reboots the ESP32 device
 
-## How It Works
-
-**WindScape** creates realistic wind behavior using a sophisticated randomized atmospheric simulation engine that mimics natural weather patterns with distinct phases and unpredictable variation.
-
-### Core Wind Engine
-
-**Randomized Target System:**
-- **Target-Based Movement:** Wind smoothly moves toward random targets within location-specific ranges
-- **Phase-Specific Behavior:** Each weather phase has its own wind speed ranges and characteristics
-- **Micro-Turbulence:** Constant small random fluctuations add natural texture and prevent static air
-- **Anti-Stagnation:** Multiple overlapping systems ensure continuous movement and variation
-
-**Weather Phase System:**
-WindScape features three distinct weather phases that create natural atmospheric cycles:
-
-#### 1. Quiet Air Phase (90-210 seconds)
-- **Wind Range:** 30% to 40% of location's base range
-- **Turbulence:** Minimal (0.2x intensity)
-- **Gusts:** 40% less frequent, gentler (1.1-1.5x intensity, 2-6s duration)
-- **Behavior:** Slow, gentle changes for peaceful, barely-there wind
-- **Experience:** Like a calm summer evening or early morning stillness
-
-#### 2. Medium Conditions Phase (120-300 seconds)
-- **Wind Range:** 70% to 80% of location's base range
-- **Turbulence:** Normal (0.6x intensity)
-- **Gusts:** Standard frequency and intensity (1.2-1.8x, 1.5-6.5s duration)
-- **Behavior:** Moderate variation with regular activity
-- **Experience:** Typical outdoor breeze with natural movement
-
-#### 3. High Activity Phase (60-150 seconds)
-- **Wind Range:** 40% to 120% of location's base range (can exceed normal maximum!)
-- **Turbulence:** Strong (1.2x intensity)
-- **Gusts:** 2.5x more frequent, powerful (1.4-2.4x intensity, 1-4s duration)
-- **Behavior:** Rapid, dramatic changes with frequent strong gusts
-- **Experience:** Storm-like conditions with intense, energizing airflow
-
-### Natural Phase Transitions
-
-The system automatically transitions between phases using realistic probabilities:
-- **Quiet → Medium** (60%) or **High** (40%) - sudden storms are possible!
-- **Medium → Quiet** (30%), **Stay Medium** (40%), or **High** (30%)
-- **High → Medium** (40%), **Quiet** (30%) - sudden calm, or **Stay High** (30%)
-
-### Location-Specific Behavior
-
-Each preset adjusts multiple atmospheric parameters for each phase:
-- **Base wind speed ranges** and **phase-specific modifications**
-- **Gust probability** and **intensity characteristics**
-- **Turbulence levels** and **change rates**
-- **Phase duration preferences** and **transition behaviors**
-
-### Enhanced Gust System
-
-**Realistic Gust Distribution:**
-- **Phase-Appropriate Timing:** Quiet phases have fewer, gentler gusts; High phases have frequent, intense ones
-- **Variable Duration:** 1.5 to 8 seconds with natural distribution (shorter gusts more common)
-- **Dynamic Intensity:** Each gust has random strength within phase-appropriate limits
-- **Natural Shape:** Three-phase progression (buildup → sustain with variation → decay)
-
-### Fan Speed Calculation
-
-1. **Target Generation:** Random targets within current phase's wind range
-2. **Smooth Transition:** Current wind speed moves toward target at phase-appropriate rate
-3. **Micro-Turbulence:** Phase-specific random fluctuations added continuously
-4. **Gust Application:** Active gust multiplier applied if gust is in progress
-5. **Global Scaling:** Wind intensity multiplier (30-150%) applied
-6. **Safety Limits:** Minimum/maximum fan speed boundaries enforced
-7. **PWM Output:** Final percentage converted to PWM signal
-
-### Real-Time Monitoring
-
-**Wind Sensors:**
-- **Wind Speed** (MPH) - Current simulated wind velocity including gusts
-- **Gust Active** (%) - Current gust intensity (0% when no gust active)
-- **Current Weather Phase** - Shows "Quiet Air", "Medium Conditions", or "High Activity"
-- **Wind Condition** - Human-readable description with phase information
-- **Current Wind State** - Shows current behavior ("Wind building", "Gust active", "Phase: 2m remaining")
-
-**System Diagnostics:**
-- **Standard ESP32 metrics** - Uptime, WiFi signal, temperature, memory usage
-
 ## Troubleshooting
 
 **Fan not responding?**
@@ -363,3 +282,86 @@ Each preset adjusts multiple atmospheric parameters for each phase:
 
 ## Roadmap
 - Explore connection to https://github.com/remvze/moodist
+
+---
+
+# How WindScape Works
+
+**WindScape** delivers authentic wind experiences through an advanced atmospheric simulation engine that replicates natural weather patterns with dynamic phases and organic variation.
+
+## Core Wind Engine
+
+### Dynamic Target System
+- **Smooth Movement Patterns:** Wind flows naturally toward randomized targets within location-appropriate ranges
+- **Dynamic Phase Behavior:** Each weather phase features unique wind characteristics and speed ranges
+- **Natural Micro-Turbulence:** Continuous subtle variations create realistic air texture and prevent artificial stillness
+- **Continuous Motion Guarantee:** Multiple overlapping systems ensure the air never feels static or mechanical
+
+### Three-Phase Weather System
+WindScape cycles through three distinct atmospheric phases that mirror real-world weather patterns:
+
+#### 1. Quiet Air Phase (90-210 seconds)
+- **Wind Intensity:** 30-40% of location's base range
+- **Turbulence:** Minimal (20% intensity)
+- **Gusts:** 40% less frequent with gentle intensity (1.1-1.5x strength, 2-6 second duration)
+- **Character:** Gradual, peaceful changes creating barely perceptible airflow
+- **Feel:** Like a tranquil summer evening or the stillness of early dawn
+
+#### 2. Medium Conditions Phase (120-300 seconds)
+- **Wind Intensity:** 70-80% of location's base range
+- **Turbulence:** Standard (60% intensity)
+- **Gusts:** Normal frequency and strength (1.2-1.8x intensity, 1.5-6.5 second duration)
+- **Character:** Moderate variation with steady, predictable activity
+- **Feel:** A comfortable outdoor breeze with natural, rhythmic movement
+
+#### 3. High Activity Phase (60-150 seconds)
+- **Wind Intensity:** 40-120% of location's base range (can exceed normal limits!)
+- **Turbulence:** Intense (120% intensity)
+- **Gusts:** 2.5x more frequent with powerful bursts (1.4-2.4x intensity, 1-4 second duration)
+- **Character:** Rapid, dramatic shifts with frequent strong gusts
+- **Feel:** Storm-like conditions delivering energizing, dynamic airflow
+
+## Natural Phase Transitions
+
+The system transitions between phases using realistic weather probabilities:
+- **From Quiet Air:** 60% chance to Medium Conditions, 40% chance to High Activity (sudden storms happen!)
+- **From Medium Conditions:** 30% to Quiet Air, 40% stay Medium, 30% to High Activity
+- **From High Activity:** 40% to Medium, 30% to Quiet Air (sudden calm), 30% stay High
+
+## Location-Specific Customization
+
+Each environment preset fine-tunes atmospheric parameters across all phases:
+- **Base wind ranges** with **phase-specific adjustments**
+- **Gust frequency** and **intensity profiles**
+- **Turbulence characteristics** and **transition speeds**
+- **Phase duration preferences** and **weather progression patterns**
+
+## Advanced Gust System
+
+### Realistic Wind Burst Patterns
+- **Phase-Matched Timing:** Quiet phases deliver infrequent, gentle gusts; High Activity phases produce frequent, intense bursts
+- **Natural Duration Range:** 1.5-8 seconds with realistic distribution (shorter gusts more common)
+- **Variable Intensity:** Each gust features randomized strength within phase-appropriate limits
+- **Organic Shape:** Three-stage progression (gradual buildup → sustained peak with variation → smooth decay)
+
+## Wind Speed Calculation Process
+
+1. **Target Generation:** Creates random wind targets within the current phase's intensity range
+2. **Smooth Transitions:** Current wind speed flows toward targets at phase-appropriate rates
+3. **Micro-Turbulence:** Applies phase-specific random fluctuations continuously
+4. **Gust Integration:** Adds active gust multipliers when wind bursts are in progress
+5. **Global Scaling:** Applies user wind intensity setting (30-150%)
+6. **Safety Enforcement:** Ensures output stays within minimum/maximum fan speed limits
+7. **PWM Conversion:** Translates final percentage to precise PWM control signals
+
+## Real-Time Wind Monitoring
+
+### Wind Conditions Display
+- **Current Wind Speed** (MPH) - Live simulated velocity including active gusts
+- **Gust Status** (%) - Real-time gust intensity (shows 0% when no gust is active)
+- **Active Weather Phase** - Displays "Quiet Air," "Medium Conditions," or "High Activity"
+- **Wind Description** - Human-friendly summary with current phase information
+- **System Status** - Shows current behavior ("Wind building," "Gust active," "Phase: 2m remaining")
+
+### System Health Diagnostics
+- **Standard ESP32 Metrics** - System uptime, WiFi signal strength, processor temperature, memory usage
