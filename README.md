@@ -113,23 +113,21 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 +-----------------------------+
 |      12V Power Supply       |
 |                             |
-|   +12V ─────┬────────────┐  |
-|             │            │
-|             ▼            │
-|   [Buck Converter]       │
-|    In: 12V   Out: 5V     │
-|        │         │       │
-|        ▼         ▼       │
-|      GND       +5V       │
-|        │         │       │
-+--------┴─────────┴───────┘
+|   +12V ─────────────┐       |
+|                     │       |
+|                     ▼       |
+|                 +12V to Fan |
+|                             |
+|                 GND ────────┘
+|                             |
++-----------------------------+
 
            +------------------------+
            |      Lolin32 Lite      |
            |        (ESP32)         |
            |                        |
-           | USB ◄─────── USB 5V from host (PC/power)
-           | GND ◄─────── Shared GND with PSU & fan
+           | USB ◄──── USB from host (PC/power)
+           | GND ◄──── Shared GND with PSU & fan
            |                        |
            | GPIO14 ─────┐          |
            |             └─────► PWM (Fan Pin 4, Blue)
