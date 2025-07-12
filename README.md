@@ -72,15 +72,95 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 
 ## Build Instructions & Hardware Setup
 
-### Hardware
+Which build you choose depends on which fan you're building this project with. Generally speaking, a 5V fan is a simpler build which can run off of any USB 3.0 or USB-C port on a computer, power bank, or low power wall connector.
+
+### 5V Case Fan (simpler)
+<details>
+
+<summary>Expand to see Bill of Materials (5V)</summary>
+
+#### Hardware
+- Any ESP32 development board with onboard wifi. Easily bought for around €3.00
+- Any 5V PC case fan that supports PWM (pulse width modulation)
+
+#### FAN
+- There's no set fan you should use, so long as the fan supports PWM speed control.
+  - An ideal option would be a a [Noctua NF-A12x25 5V](https://noctua.at/en/products/fan/nf-a12x25-5v), which is extremeley quiet, and can operate on as little as 5% duty cycle
+  - When comparing each fan's noise floor, remember that [db is logarithmic!](https://en.wikipedia.org/wiki/Decibel)
+
+##### DIY NV-FS1 Desk and Room Fan
+You can safe a bit of money and just print and build your own NV-FS1 with the NA-AA1-12 airflow amplifier. Here are some links:
+- https://www.printables.com/model/554226-120mm-computer-fan-desk-mount
+- https://www.printables.com/model/1324299-pc-desk-fan
+- https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
+- https://noctua.at/en/nf-a12x25-pwm
+- https://noctua.at/en/nv-aa1-12
+
+#### BOM
+Two simplified BOM options with one KIT version and a DIY build variant:
+
+| Item                            | 5V DIY Build (€)   |
+| ------------------------------- | ------------------ |
+| Noctua NF-A12x25 5V             | 33.00              |
+| Generic ESP32                   | 3.00               |
+| General hardware (screws, nuts) | 4.00               |
+| **Total Estimated Cost**        | €40.00             |
+
+#### Wiring Diagram
+
+```
++----------------------------+
+|     USB Power (5V)         |
+|                            |
+|   +5V ─────────────┐       |
+|                    ▼       |
+|           +----------------------+
+|           |   ESP32 WROOM Board  |
+|           |  (AliExpress-style)  |
+|           |                      |
+|           | 5V/VIN ◄─── 5V from USB
+|           | GND    ◄─── GND from USB
+|           |                      |
+|           | GPIO14 ───┐          |
+|           |           └────► PWM (Fan Pin 4, Blue)
+|           |                      |
+|           | GPIO27 ◄──┬────── TACH (Fan Pin 3, Green)
+|           |           │
+|           |   [10kΩ pull-up to 3.3V]
+|           |           │
+|           |     [3.3kΩ] in series
+|           |           │
+|           |   [0.1nF cap to GND] ◄──(RC filter)
+|           +----------------------+
+|                     │
+|                     ▼
+|           +----------------------+
+|           |     Noctua Fan       |
+|           |    5V PWM (4-pin)    |
+|           |                      |
+|           | Pin 1 (Black): GND ◄────── GND
+|           | Pin 2 (Red or Yellow):  +5V ◄─── 5V/VIN
+|           | Pin 3 (Green): TACH ───► GPIO27 (filtered)
+|           | Pin 4 (Blue):   PWM ◄─── GPIO14
+|           +----------------------+
+```
+           
+</details>
+
+### 12V Case Fan
+<details>
+
+<summary>Expand to see Bill of Materials (12V)</summary>
+
+#### Hardware
 - ESP32 development board (Lolin32 Lite recommended) around 6 Euros
 - 12V power supply
 - Optional: buck converter for 5V ESP32 power, the ESP32 can be powered by USB too.
 
-### FAN
+#### FAN
 - 4-pin PWM desk and room fan (like the Noctua NV-FS1) https://noctua.at/en/nv-fs1
 
-#### DIY NV-FS1 Desk and Room Fan
+##### DIY NV-FS1 Desk and Room Fan
 You can safe a bit of money and just print and build your own NV-FS1 with the NA-AA1-12 airflow amplifier. Here are some links:
 - https://www.printables.com/model/1324299-pc-desk-fan
 - https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
@@ -104,9 +184,9 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 | **Total Estimated Cost**        | **€116.06**                                        | **€78.56**                |
 | **Savings with DIY Build**      | **–**                                              | **€37.50 less**           |
 
-### Wiring Diagram
+#### Wiring Diagram
 
-#### USB Powered
+##### USB Powered
 
 ```
 +-----------------------------+
@@ -152,7 +232,7 @@ Two simplified BOM options with one KIT version and a DIY build variant:
            +------------------------+
 ```
 
-#### With Buck Converter
+##### With Buck Converter
 
 ```
 +-----------------------------+
@@ -161,7 +241,7 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 |   +12V ─────┬────────────┐  |
 |             │            │
 |             ▼            │
-|   [Buck Converter]       │
+|   [Buck Conv. [LM2596]   │
 |    In: 12V   Out: 5V     │
 |        │         │       │
 |        ▼         ▼       │
@@ -210,6 +290,8 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 ![breadboard](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img1.png?raw=true)
 
 ![assembled](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img2.png?raw=true)
+
+</details>
 
 ### Software
 1. Flash the ESPHome config to your ESP32
