@@ -19,11 +19,12 @@ substitutions:
   external_max_kmh: "160"  # KMH that maps to 100% fan speed
   external_min_kmh: "0"    # KMH that maps to 10% fan speed
   external_sensor_update_interval: "200ms"
+  external_sensor_timeout: "60s"  # Timeout before reverting mode
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: "PWM fan controller with realistic randomized wind simulation"
+  comment: "Transforming ordinary PC fans into natural wind simulation desk fans. https://github.com/TilmanGriesel/WindScape"
 
 esp32:
   board: esp32dev
@@ -63,27 +64,54 @@ output:
 
 fan:
   - platform: speed
-    name: "Manual Control"
+    name: "Fan Control"
     id: desk_fan
     output: fan_pwm_output
     speed_count: 100
     restore_mode: RESTORE_DEFAULT_OFF
     icon: "mdi:fan"
+    preset_modes:
+      - "Steady Low"
+      - "Steady Medium" 
+      - "Steady High"
+      - "Steady Breeze"
+      - "Steady Max"
+      - "Wind Ocean"
+      - "Wind Mediterranean "
+      - "Wind Countryside"
+      - "Wind Mountain"
+      - "Wind Plains"
+      - "Wind Fjord"
+      - "External Sensor"
+    on_turn_on:
+      - logger.log: "Fan Control turned ON - enabling fan power"
+      - lambda: |-
+          id(fan_power_enabled) = true;
+    on_turn_off:
+      - logger.log: "Fan Control turned OFF - disabling fan power"
+      - lambda: |-
+          id(fan_power_enabled) = false;
+          id(fan_pwm_output).turn_off();
+          // Stop all simulations when fan is turned off
+          id(wind_simulation_loop).stop();
+          id(gust_check_loop).stop();
+          id(external_sensor_loop).stop();
+          id(external_sensor_timeout_loop).stop();
+          id(wind_simulation_active) = false;
     on_speed_set:
       - logger.log:
-          format: "Manual fan control used, speed set to: %.0f%%"
+          format: "Manual fan speed set to: %.0f%%"
           args: ['x']
-      - if:
-          condition:
-            lambda: 'return id(wind_mode_select).state != "Manual";'
-          then:
-            - logger.log: "Auto-switching to Manual mode due to user interaction"
-            - select.set:
-                id: wind_mode_select
-                option: "Manual"
       - script.execute:
           id: apply_fan_speed
           speed_percent: !lambda "return x;"
+    on_preset_set:
+      - logger.log:
+          format: "Fan preset changed to: %s"
+          args: ['x.c_str()']
+      - script.execute:
+          id: handle_preset_change
+          preset_name: !lambda "return x;"
 
 # ====================================================================================
 # SENSORS & MONITORING
@@ -103,14 +131,24 @@ sensor:
           if (isnan(x) || x < 0) return 0.0;
           return x;
     on_value:
+      - lambda: |-
+          // Update last received time
+          id(last_external_sensor_update) = millis() / 1000.0f;
       - if:
           condition:
-            lambda: 'return id(wind_mode_select).state != "External Sensor";'
+            lambda: 'return id(current_preset_mode) != "External Sensor";'
           then:
-            - logger.log: "Auto-switching to External Sensor mode due to sensor data"
-            - select.set:
-                id: wind_mode_select
-                option: "External Sensor"
+            - logger.log: "Auto-switching to External Sensor preset due to sensor data"
+            - lambda: |-
+                // Store current preset as previous before switching
+                if (id(current_preset_mode) != "External Sensor") {
+                  id(previous_preset_mode) = id(current_preset_mode);
+                }
+                id(current_preset_mode) = "External Sensor";
+            - lambda: |-
+                auto call = id(desk_fan).make_call();
+                call.set_preset_mode("External Sensor");
+                call.perform();
 
   # Fan RPM monitoring
   - platform: pulse_counter
@@ -242,30 +280,9 @@ number:
     initial_value: ${fan_speed_default}
     unit_of_measurement: "%"
     restore_value: true
-    icon: "mdi:speedometer-medium"
+    icon: "mdi:speedometer"
     mode: slider
     optimistic: true
-
-# Location-based wind profiles
-select:
-  - platform: template
-    name: "Wind Mode"
-    id: wind_mode_select
-    icon: "mdi:weather-partly-cloudy"
-    options:
-      - "Ocean"
-      - "Mediterranean" 
-      - "Countryside"
-      - "Mountains"
-      - "Plains"
-      - "Fjord"
-      - "External Sensor"
-      - "Manual"
-    initial_option: "Ocean"
-    restore_value: true
-    optimistic: true
-    on_value:
-      - script.execute: handle_mode_change
 
 # System status
 binary_sensor:
@@ -279,11 +296,35 @@ binary_sensor:
     lambda: |-
       return id(wind_simulation_active);
 
+switch:
+
 # ====================================================================================
 # GLOBAL STATE VARIABLES
 # ====================================================================================
 
 globals:
+  # Global power control
+  - id: fan_power_enabled
+    type: bool
+    restore_value: true
+    initial_value: 'true'
+
+  # External sensor timeout tracking
+  - id: last_external_sensor_update
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+  
+  - id: current_preset_mode
+    type: std::string
+    restore_value: true
+    initial_value: '"Steady Low"'
+  
+  - id: previous_preset_mode
+    type: std::string
+    restore_value: true
+    initial_value: '"Steady Low"'
+
   # Simulation control
   - id: wind_simulation_active
     type: bool
@@ -384,36 +425,181 @@ globals:
 # ====================================================================================
 
 script:
-  # Apply fan speed with safety limits
+  # Apply fan speed with safety limits and power check
   - id: apply_fan_speed
     parameters:
       speed_percent: float
     then:
+      - if:
+          condition:
+            lambda: 'return !id(fan_power_enabled);'
+          then:
+            - lambda: |-
+                id(fan_pwm_output).turn_off();
+                ESP_LOGD("wind", "Fan power disabled - ignoring speed command");
+          else:
+            - lambda: |-
+                float requested_speed = speed_percent / 100.0f;
+                float speed_limit = id(fan_speed_limit).state / 100.0f;
+                float min_speed = id(minimum_fan_speed).state / 100.0f;
+                float intensity_multiplier = id(wind_intensity).state / 100.0f;
+                
+                // Apply global intensity modifier during simulation
+                if (id(wind_simulation_active)) {
+                  requested_speed *= intensity_multiplier;
+                }
+                
+                // Enforce speed limits
+                requested_speed = fmax(min_speed, fmin(speed_limit, requested_speed));
+                
+                if (requested_speed <= 0.01f) {
+                  id(fan_pwm_output).turn_off();
+                } else {
+                  id(fan_pwm_output).set_level(requested_speed);
+                }
+
+  # Handle preset mode changes
+  - id: handle_preset_change
+    parameters:
+      preset_name: std::string
+    then:
       - lambda: |-
-          float requested_speed = speed_percent / 100.0f;
-          float speed_limit = id(fan_speed_limit).state / 100.0f;
-          float min_speed = id(minimum_fan_speed).state / 100.0f;
-          float intensity_multiplier = id(wind_intensity).state / 100.0f;
+          std::string preset = preset_name;
+          ESP_LOGI("wind", "Preset changed to: %s", preset.c_str());
           
-          // Apply global intensity modifier during simulation
-          if (id(wind_simulation_active)) {
-            requested_speed *= intensity_multiplier;
+          // Update current preset tracking
+          id(current_preset_mode) = preset;
+          
+          // Stop all current activities
+          id(wind_simulation_loop).stop();
+          id(gust_check_loop).stop();
+          id(external_sensor_loop).stop();
+          id(external_sensor_timeout_loop).stop();
+          id(wind_simulation_active) = false;
+          
+          // Reset gust state
+          id(gust_active) = false;
+          id(gust_intensity) = 1.0f;
+          id(gust_active_sensor).publish_state(0);
+          
+      - delay: 300ms
+      - lambda: |-
+          std::string preset = preset_name;
+          
+          // Handle manual speed presets
+          if (preset == "Steady Low") {
+            id(apply_fan_speed).execute(25.0f);
+          } else if (preset == "Steady Medium") {
+            id(apply_fan_speed).execute(50.0f);
+          } else if (preset == "Steady High") {
+            id(apply_fan_speed).execute(75.0f);
+          } else if (preset == "Steady Breeze") {
+            id(apply_fan_speed).execute(35.0f);
+          } else if (preset == "Steady Max") {
+            id(apply_fan_speed).execute(100.0f);
           }
+          // Handle wind simulation presets
+          else if (preset == "Wind Ocean") {
+            id(base_wind_min) = 3.6f;
+            id(base_wind_max) = 7.2f;
+            id(gust_probability_base) = 0.03f;
+            id(location_gust_strength) = 2.0f;
+            id(start_wind_simulation).execute();
+          } else if (preset == "Wind Mediterranean ") {
+            id(base_wind_min) = 1.8f;
+            id(base_wind_max) = 4.5f;
+            id(gust_probability_base) = 0.015f;
+            id(location_gust_strength) = 1.6f;
+            id(start_wind_simulation).execute();
+          } else if (preset == "Wind Countryside") {
+            id(base_wind_min) = 0.9f;
+            id(base_wind_max) = 3.6f;
+            id(gust_probability_base) = 0.008f;
+            id(location_gust_strength) = 1.4f;
+            id(start_wind_simulation).execute();
+          } else if (preset == "Wind Mountain") {
+            id(base_wind_min) = 2.7f;
+            id(base_wind_max) = 8.0f;
+            id(gust_probability_base) = 0.05f;
+            id(location_gust_strength) = 2.3f;
+            id(start_wind_simulation).execute();
+          } else if (preset == "Wind Plains") {
+            id(base_wind_min) = 4.5f;
+            id(base_wind_max) = 9.8f;
+            id(gust_probability_base) = 0.08f;
+            id(location_gust_strength) = 2.5f;
+            id(start_wind_simulation).execute();
+          } else if (preset == "Wind Fjord") {
+            id(base_wind_min) = 3.6f;
+            id(base_wind_max) = 8.9f;
+            id(gust_probability_base) = 0.06f;
+            id(location_gust_strength) = 2.4f;
+            id(start_wind_simulation).execute();
+          }
+          // Handle external sensor preset
+          else if (preset == "External Sensor") {
+            id(external_sensor_loop).execute();
+            id(external_sensor_timeout_loop).execute();
+            ESP_LOGI("wind", "External Sensor preset activated with timeout monitoring");
+          }
+
+  # Start wind simulation (extracted common logic)
+  - id: start_wind_simulation
+    then:
+      - lambda: |-
+          // Initialize wind state with phase-specific ranges
+          float mid_range = (id(base_wind_min) + id(base_wind_max)) * 0.5f;
+          id(current_wind_speed) = mid_range;
+          id(target_wind_speed) = mid_range;
           
-          // Enforce speed limits
-          requested_speed = fmax(min_speed, fmin(speed_limit, requested_speed));
+          // Initialize phase system
+          id(current_weather_phase) = 1; // Start with medium phase
+          id(phase_start_time) = millis() / 1000.0f;
+          id(phase_duration) = 120.0f; // 2 minutes initial phase
           
-          if (requested_speed <= 0.01f) {
-            id(fan_pwm_output).turn_off();
-          } else {
-            id(fan_pwm_output).set_level(requested_speed);
+          // Set initial phase ranges (medium)
+          id(phase_wind_min) = id(base_wind_min) * 0.7f;
+          id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.8f;
+          
+          // Start simulation
+          id(wind_simulation_active) = true;
+          id(generate_wind_target).execute();
+          id(wind_simulation_loop).execute();
+          id(gust_check_loop).execute();
+          
+          ESP_LOGI("wind", "Started wind simulation: base range %.1f-%.1f mph, starting medium phase", 
+                   id(base_wind_min), id(base_wind_max));
+
+  # Check external sensor timeout
+  - id: check_external_sensor_timeout
+    then:
+      - lambda: |-
+          if (id(current_preset_mode) != "External Sensor") return;
+          
+          float current_time = millis() / 1000.0f;
+          float time_since_update = current_time - id(last_external_sensor_update);
+          
+          // Check if timeout exceeded (60 seconds)
+          if (time_since_update > 60.0f && id(last_external_sensor_update) > 0) {
+            ESP_LOGW("wind", "External sensor timeout (%.1fs), reverting to previous preset: %s", 
+                     time_since_update, id(previous_preset_mode).c_str());
+            
+            // Revert to previous preset
+            std::string prev_preset = id(previous_preset_mode);
+            if (prev_preset.empty() || prev_preset == "External Sensor") {
+              prev_preset = "Steady Low"; // Fallback to default
+            }
+            
+            auto call = id(desk_fan).make_call();
+            call.set_preset_mode(prev_preset);
+            call.perform();
           }
 
   # External sensor input processing
   - id: process_external_sensor_data
     then:
       - lambda: |-
-          if (id(wind_mode_select).state != "External Sensor") return;
+          if (id(current_preset_mode) != "External Sensor") return;
           
           float kmh = id(external_kmh_input).state;
           if (isnan(kmh) || kmh < 0) kmh = 0;
@@ -714,95 +900,8 @@ script:
           }
 
 # ====================================================================================
-# SIMULATION CONTROL & MODE MANAGEMENT
+# SIMULATION CONTROL & PRESET MANAGEMENT
 # ====================================================================================
-
-  # Handle wind mode changes
-  - id: handle_mode_change
-    then:
-      - lambda: |-
-          std::string mode = id(wind_mode_select).state;
-          ESP_LOGI("wind", "Wind mode changed to: %s", mode.c_str());
-          
-          // Stop simulation
-          id(wind_simulation_loop).stop();
-          id(gust_check_loop).stop();
-          id(external_sensor_loop).stop();
-          id(wind_simulation_active) = false;
-          
-          // Reset gust state
-          id(gust_active) = false;
-          id(gust_intensity) = 1.0f;
-          id(gust_active_sensor).publish_state(0);
-          
-      - delay: 300ms
-      - lambda: |-
-          std::string mode = id(wind_mode_select).state;
-          
-          if (mode == "External Sensor") {
-            // Start external sensor processing
-            id(external_sensor_loop).execute();
-            ESP_LOGI("wind", "External Sensor mode activated");
-          } else if (mode != "Manual") {
-          // Set location-specific parameters (converted to m/s)
-            if (mode == "Ocean") {
-              id(base_wind_min) = 3.6f;
-              id(base_wind_max) = 7.2f;
-              id(gust_probability_base) = 0.03f;
-              id(location_gust_strength) = 2.0f;
-            } else if (mode == "Mediterranean") {
-              id(base_wind_min) = 1.8f;
-              id(base_wind_max) = 4.5f;
-              id(gust_probability_base) = 0.015f;
-              id(location_gust_strength) = 1.6f;
-            } else if (mode == "Countryside") {
-              id(base_wind_min) = 0.9f;
-              id(base_wind_max) = 3.6f;
-              id(gust_probability_base) = 0.008f;
-              id(location_gust_strength) = 1.4f;
-            } else if (mode == "Mountains") {
-              id(base_wind_min) = 2.7f;
-              id(base_wind_max) = 8.0f;
-              id(gust_probability_base) = 0.05f;
-              id(location_gust_strength) = 2.3f;
-            } else if (mode == "Plains") {
-              id(base_wind_min) = 4.5f;
-              id(base_wind_max) = 9.8f;
-              id(gust_probability_base) = 0.08f;
-              id(location_gust_strength) = 2.5f;
-            } else if (mode == "Fjord") {
-              id(base_wind_min) = 3.6f;
-              id(base_wind_max) = 8.9f;
-              id(gust_probability_base) = 0.06f;
-              id(location_gust_strength) = 2.4f;
-            }
-            
-            // Initialize wind state with phase-specific ranges
-            float mid_range = (id(base_wind_min) + id(base_wind_max)) * 0.5f;
-            id(current_wind_speed) = mid_range;
-            id(target_wind_speed) = mid_range;
-            
-            // Initialize phase system
-            id(current_weather_phase) = 1; // Start with medium phase
-            id(phase_start_time) = millis() / 1000.0f;
-            id(phase_duration) = 120.0f; // 2 minutes initial phase
-            
-            // Set initial phase ranges (medium)
-            id(phase_wind_min) = id(base_wind_min) * 0.7f;
-            id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.8f;
-            
-            // Start simulation
-            id(wind_simulation_active) = true;
-            id(generate_wind_target).execute();
-            id(wind_simulation_loop).execute();
-            id(gust_check_loop).execute();
-            
-            ESP_LOGI("wind", "Started %s simulation: base range %.1f-%.1f mph, starting medium phase", 
-                     mode.c_str(), id(base_wind_min), id(base_wind_max));
-          } else {
-            id(fan_pwm_output).turn_off();
-            ESP_LOGI("wind", "Manual mode activated");
-          }
 
   # Main simulation loop
   - id: wind_simulation_loop
@@ -832,10 +931,21 @@ script:
     then:
       - while:
           condition:
-            lambda: 'return id(wind_mode_select).state == "External Sensor";'
+            lambda: 'return id(current_preset_mode) == "External Sensor";'
           then:
             - script.execute: process_external_sensor_data
             - delay: ${external_sensor_update_interval}
+
+  # External sensor timeout monitoring loop
+  - id: external_sensor_timeout_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return id(current_preset_mode) == "External Sensor";'
+          then:
+            - script.execute: check_external_sensor_timeout
+            - delay: 5s
 
 # ====================================================================================
 # USER INTERFACE
