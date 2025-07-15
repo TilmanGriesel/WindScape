@@ -62,27 +62,32 @@ output:
     frequency: ${pwm_frequency}
     min_power: ${pwm_min_power}
 
+  # Virtual oscillation output
+  - platform: template
+    id: oscillation_output
+    type: binary
+    write_action:
+      - lambda: |-
+          // This output doesn't control hardware, just tracks state
+          // The actual oscillation logic is handled in on_oscillating_set
+
 fan:
   - platform: speed
     name: "Fan Control"
     id: desk_fan
     output: fan_pwm_output
+    oscillation_output: oscillation_output
     speed_count: 100
     restore_mode: RESTORE_DEFAULT_OFF
     icon: "mdi:fan"
     preset_modes:
-      - "Steady Low"
-      - "Steady Medium" 
-      - "Steady High"
-      - "Steady Breeze"
-      - "Steady Max"
-      - "Wind Ocean"
-      - "Wind Mediterranean "
-      - "Wind Countryside"
-      - "Wind Mountain"
-      - "Wind Plains"
-      - "Wind Fjord"
-      - "External Sensor"
+      - "Countryside (Low)"     # Steady Low when oscillating=OFF, Countryside when oscillating=ON
+      - "Mediterranean (Medium)" # Steady Medium when oscillating=OFF, Mediterranean when oscillating=ON 
+      - "Ocean (High)"          # Steady High when oscillating=OFF, Ocean when oscillating=ON
+      - "Mountain (Breeze)"     # Steady Breeze when oscillating=OFF, Mountain when oscillating=ON
+      - "Plains (Max)"          # Steady Max when oscillating=OFF, Plains when oscillating=ON
+      - "Fjord"                 # Special wind mode (only available when oscillating=ON)
+      - "External"              # External sensor mode
     on_turn_on:
       - logger.log: "Fan Control turned ON - enabling fan power"
       - lambda: |-
@@ -105,6 +110,13 @@ fan:
       - script.execute:
           id: apply_fan_speed
           speed_percent: !lambda "return x;"
+    on_oscillating_set:
+      - logger.log:
+          format: "Oscillating mode changed to: %s"
+          args: ['x ? "Wind Simulation" : "Steady Mode"']
+      - script.execute:
+          id: handle_mode_change
+          oscillating: !lambda "return x;"
     on_preset_set:
       - logger.log:
           format: "Fan preset changed to: %s"
@@ -136,18 +148,18 @@ sensor:
           id(last_external_sensor_update) = millis() / 1000.0f;
       - if:
           condition:
-            lambda: 'return id(current_preset_mode) != "External Sensor";'
+            lambda: 'return id(current_preset_mode) != "External";'
           then:
-            - logger.log: "Auto-switching to External Sensor preset due to sensor data"
+            - logger.log: "Auto-switching to External preset due to sensor data"
             - lambda: |-
                 // Store current preset as previous before switching
-                if (id(current_preset_mode) != "External Sensor") {
+                if (id(current_preset_mode) != "External") {
                   id(previous_preset_mode) = id(current_preset_mode);
                 }
-                id(current_preset_mode) = "External Sensor";
+                id(current_preset_mode) = "External";
             - lambda: |-
                 auto call = id(desk_fan).make_call();
-                call.set_preset_mode("External Sensor");
+                call.set_preset_mode("External");
                 call.perform();
 
   # Fan RPM monitoring
@@ -296,8 +308,6 @@ binary_sensor:
     lambda: |-
       return id(wind_simulation_active);
 
-switch:
-
 # ====================================================================================
 # GLOBAL STATE VARIABLES
 # ====================================================================================
@@ -318,12 +328,18 @@ globals:
   - id: current_preset_mode
     type: std::string
     restore_value: true
-    initial_value: '"Steady Low"'
+    initial_value: '"Countryside (Low)"'
   
   - id: previous_preset_mode
     type: std::string
     restore_value: true
-    initial_value: '"Steady Low"'
+    initial_value: '"Countryside (Low)"'
+
+  # Track oscillating state
+  - id: is_oscillating
+    type: bool
+    restore_value: true
+    initial_value: 'false'
 
   # Simulation control
   - id: wind_simulation_active
@@ -458,6 +474,30 @@ script:
                   id(fan_pwm_output).set_level(requested_speed);
                 }
 
+  # Handle oscillating mode changes (Steady vs Wind)
+  - id: handle_mode_change
+    parameters:
+      oscillating: bool
+    then:
+      - lambda: |-
+          id(is_oscillating) = oscillating;
+          ESP_LOGI("wind", "Mode changed to: %s", oscillating ? "Wind Simulation" : "Steady Mode");
+          
+          // Stop current activities
+          id(wind_simulation_loop).stop();
+          id(gust_check_loop).stop();
+          id(wind_simulation_active) = false;
+          
+          // Reset gust state
+          id(gust_active) = false;
+          id(gust_intensity) = 1.0f;
+          id(gust_active_sensor).publish_state(0);
+          
+      - delay: 300ms
+      - script.execute:
+          id: apply_current_preset
+          force_apply: true
+
   # Handle preset mode changes
   - id: handle_preset_change
     parameters:
@@ -483,64 +523,92 @@ script:
           id(gust_active_sensor).publish_state(0);
           
       - delay: 300ms
+      - script.execute:
+          id: apply_current_preset
+          force_apply: true
+
+  # Apply current preset based on oscillating state
+  - id: apply_current_preset
+    parameters:
+      force_apply: bool
+    then:
       - lambda: |-
-          std::string preset = preset_name;
+          std::string preset = id(current_preset_mode);
+          bool is_wind_mode = id(is_oscillating);
           
-          // Handle manual speed presets
-          if (preset == "Steady Low") {
-            id(apply_fan_speed).execute(25.0f);
-          } else if (preset == "Steady Medium") {
-            id(apply_fan_speed).execute(50.0f);
-          } else if (preset == "Steady High") {
-            id(apply_fan_speed).execute(75.0f);
-          } else if (preset == "Steady Breeze") {
-            id(apply_fan_speed).execute(35.0f);
-          } else if (preset == "Steady Max") {
-            id(apply_fan_speed).execute(100.0f);
-          }
-          // Handle wind simulation presets
-          else if (preset == "Wind Ocean") {
-            id(base_wind_min) = 3.6f;
-            id(base_wind_max) = 7.2f;
-            id(gust_probability_base) = 0.03f;
-            id(location_gust_strength) = 2.0f;
-            id(start_wind_simulation).execute();
-          } else if (preset == "Wind Mediterranean ") {
-            id(base_wind_min) = 1.8f;
-            id(base_wind_max) = 4.5f;
-            id(gust_probability_base) = 0.015f;
-            id(location_gust_strength) = 1.6f;
-            id(start_wind_simulation).execute();
-          } else if (preset == "Wind Countryside") {
-            id(base_wind_min) = 0.9f;
-            id(base_wind_max) = 3.6f;
-            id(gust_probability_base) = 0.008f;
-            id(location_gust_strength) = 1.4f;
-            id(start_wind_simulation).execute();
-          } else if (preset == "Wind Mountain") {
-            id(base_wind_min) = 2.7f;
-            id(base_wind_max) = 8.0f;
-            id(gust_probability_base) = 0.05f;
-            id(location_gust_strength) = 2.3f;
-            id(start_wind_simulation).execute();
-          } else if (preset == "Wind Plains") {
-            id(base_wind_min) = 4.5f;
-            id(base_wind_max) = 9.8f;
-            id(gust_probability_base) = 0.08f;
-            id(location_gust_strength) = 2.5f;
-            id(start_wind_simulation).execute();
-          } else if (preset == "Wind Fjord") {
-            id(base_wind_min) = 3.6f;
-            id(base_wind_max) = 8.9f;
-            id(gust_probability_base) = 0.06f;
-            id(location_gust_strength) = 2.4f;
-            id(start_wind_simulation).execute();
-          }
-          // Handle external sensor preset
-          else if (preset == "External Sensor") {
+          ESP_LOGI("wind", "Applying preset '%s' in %s mode", 
+                   preset.c_str(), is_wind_mode ? "Wind" : "Steady");
+          
+          // Handle External sensor preset (mode-independent)
+          if (preset == "External") {
             id(external_sensor_loop).execute();
             id(external_sensor_timeout_loop).execute();
             ESP_LOGI("wind", "External Sensor preset activated with timeout monitoring");
+            return;
+          }
+          
+          // Handle other presets based on oscillating state
+          if (!is_wind_mode) {
+            // Steady mode - fixed speeds
+            if (preset == "Countryside (Low)") {
+              id(apply_fan_speed).execute(25.0f);
+            } else if (preset == "Mediterranean (Medium)") {
+              id(apply_fan_speed).execute(50.0f);
+            } else if (preset == "Ocean (High)") {
+              id(apply_fan_speed).execute(75.0f);
+            } else if (preset == "Mountain (Breeze)") {
+              id(apply_fan_speed).execute(35.0f);
+            } else if (preset == "Plains (Max)") {
+              id(apply_fan_speed).execute(100.0f);
+            } else if (preset == "Fjord") {
+              // Fjord only available in wind mode, default to medium in steady
+              id(apply_fan_speed).execute(50.0f);
+            }
+          } else {
+            // Wind simulation mode - different environments
+            if (preset == "Countryside (Low)") {
+              // Countryside (French Fields): 2-8 mph, rare subtle gusts
+              id(base_wind_min) = 2.0f;
+              id(base_wind_max) = 8.0f;
+              id(gust_probability_base) = 0.008f;
+              id(location_gust_strength) = 1.4f;
+              id(start_wind_simulation).execute();
+            } else if (preset == "Mediterranean (Medium)") {
+              // Mediterranean (Italian Coast): 4-10 mph, gentle infrequent gusts
+              id(base_wind_min) = 4.0f;
+              id(base_wind_max) = 10.0f;
+              id(gust_probability_base) = 0.015f;
+              id(location_gust_strength) = 1.6f;
+              id(start_wind_simulation).execute();
+            } else if (preset == "Ocean (High)") {
+              // Ocean (Atlantic Coast): 8-16 mph, frequent rolling gusts
+              id(base_wind_min) = 8.0f;
+              id(base_wind_max) = 16.0f;
+              id(gust_probability_base) = 0.03f;
+              id(location_gust_strength) = 2.0f;
+              id(start_wind_simulation).execute();
+            } else if (preset == "Mountain (Breeze)") {
+              // Mountains (Alpine Range): 6-18 mph, sharp frequent gusts
+              id(base_wind_min) = 6.0f;
+              id(base_wind_max) = 18.0f;
+              id(gust_probability_base) = 0.05f;
+              id(location_gust_strength) = 2.3f;
+              id(start_wind_simulation).execute();
+            } else if (preset == "Plains (Max)") {
+              // Plains (Patagonian Steppes): 10-22 mph, powerful sustained gusts
+              id(base_wind_min) = 10.0f;
+              id(base_wind_max) = 22.0f;
+              id(gust_probability_base) = 0.08f;
+              id(location_gust_strength) = 2.5f;
+              id(start_wind_simulation).execute();
+            } else if (preset == "Fjord") {
+              // Fjord (Norwegian Fjords): 8-20 mph, channeled dramatic gusts
+              id(base_wind_min) = 8.0f;
+              id(base_wind_max) = 20.0f;
+              id(gust_probability_base) = 0.06f;
+              id(location_gust_strength) = 2.4f;
+              id(start_wind_simulation).execute();
+            }
           }
 
   # Start wind simulation (extracted common logic)
@@ -574,7 +642,7 @@ script:
   - id: check_external_sensor_timeout
     then:
       - lambda: |-
-          if (id(current_preset_mode) != "External Sensor") return;
+          if (id(current_preset_mode) != "External") return;
           
           float current_time = millis() / 1000.0f;
           float time_since_update = current_time - id(last_external_sensor_update);
@@ -586,8 +654,8 @@ script:
             
             // Revert to previous preset
             std::string prev_preset = id(previous_preset_mode);
-            if (prev_preset.empty() || prev_preset == "External Sensor") {
-              prev_preset = "Steady Low"; // Fallback to default
+            if (prev_preset.empty() || prev_preset == "External") {
+              prev_preset = "Countryside (Low)"; // Fallback to default
             }
             
             auto call = id(desk_fan).make_call();
@@ -599,7 +667,7 @@ script:
   - id: process_external_sensor_data
     then:
       - lambda: |-
-          if (id(current_preset_mode) != "External Sensor") return;
+          if (id(current_preset_mode) != "External") return;
           
           float kmh = id(external_kmh_input).state;
           if (isnan(kmh) || kmh < 0) kmh = 0;
@@ -716,9 +784,9 @@ script:
               id(phase_wind_max) = id(base_wind_max) * 1.2f; // Can exceed base max during storms
             }
             
-            // Clamp phase ranges to reasonable limits
-            id(phase_wind_min) = fmax(0.4f, id(phase_wind_min));
-            id(phase_wind_max) = fmin(11.2f, id(phase_wind_max));
+            // Clamp phase ranges to reasonable limits (0.5-25 mph)
+            id(phase_wind_min) = fmax(0.5f, id(phase_wind_min));
+            id(phase_wind_max) = fmin(25.0f, id(phase_wind_max));
             
             ESP_LOGI("wind", "Phase change %d->%d: range %.1f-%.1f mph, duration %.0fs", 
                      old_phase, id(current_weather_phase), 
@@ -762,8 +830,8 @@ script:
           
           id(current_wind_speed) = current + change + micro_turb;
           
-          // Clamp to reasonable bounds
-          id(current_wind_speed) = fmax(0.4f, fmin(11.2f, id(current_wind_speed)));
+          // Clamp to reasonable bounds (0-25 mph range)
+          id(current_wind_speed) = fmax(0.5f, fmin(25.0f, id(current_wind_speed)));
           
           // Phase-specific target change behavior
           float change_threshold = 2.0f;
@@ -798,9 +866,10 @@ script:
           
           id(wind_speed_sensor).publish_state(final_wind);
           
-          // Convert to fan percentage (15% to 85% range)
-          float fan_percent = 15.0f + ((final_wind - 0.4f) / 10.8f) * 70.0f;
-          fan_percent = fmax(15.0f, fmin(85.0f, fan_percent));
+          // Convert wind speed (mph) to fan percentage
+          // Wind range: 0-25 mph maps to 10-90% fan speed
+          float fan_percent = 10.0f + ((final_wind / 25.0f) * 80.0f);
+          fan_percent = fmax(10.0f, fmin(90.0f, fan_percent));
           
           id(apply_fan_speed).execute(fan_percent);
 
@@ -931,7 +1000,7 @@ script:
     then:
       - while:
           condition:
-            lambda: 'return id(current_preset_mode) == "External Sensor";'
+            lambda: 'return id(current_preset_mode) == "External";'
           then:
             - script.execute: process_external_sensor_data
             - delay: ${external_sensor_update_interval}
@@ -942,7 +1011,7 @@ script:
     then:
       - while:
           condition:
-            lambda: 'return id(current_preset_mode) == "External Sensor";'
+            lambda: 'return id(current_preset_mode) == "External";'
           then:
             - script.execute: check_external_sensor_timeout
             - delay: 5s
