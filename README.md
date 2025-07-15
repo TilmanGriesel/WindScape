@@ -6,14 +6,16 @@
 
 WindScape delivers authentic, location‑inspired airflow, from a gentle Mediterranean whisper to a brisk Alpine surge, creating a natural, immersive atmosphere for your workspace, gaming setup, or sim‑racing cockpit. It’s a versatile wind simulator ready to elevate any project you come up with.
 
+![noctua_nv_fs1_1](https://noctua.at/pub/media/catalog/product/cache/74c1057f7991b4edb2bc7bdaa94de933/n/o/noctua_nv_fs1_5.jpg)
+
 ## Table of Contents
 
 1. [Features](#features)
 1. [Operating Modes](#operating-modes)
 1. [Demo](#demo)
-1. [Preset Library](#preset-library)
 1. [Build Guides](#build-guides)
 1. [Software Setup](#software-setup)
+1. [Preset Library](#preset-library)
 1. [Troubleshooting](#troubleshooting)
 1. [Tips for Best Experience](#tips-for-best-experience)
 1. [Technical Notes](#technical-notes)
@@ -65,20 +67,7 @@ WindScape delivers authentic, location‑inspired airflow, from a gentle Mediter
 ![WindScape configuration](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_01.gif?raw=true)
 ![WindScape dashboard](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_02.gif?raw=true)
 ![External sensor example](https://github.com/TilmanGriesel/WindScape/blob/main/docs/ha_iracing_01.png?raw=true)
-
----
-
-## Preset Library
-
-| # | Preset                            | Base Wind Range | Gust Style               | Character                      |
-| - | --------------------------------- | --------------- | ------------------------ | ------------------------------ |
-| 1 | **Ocean (Atlantic Coast)**        | 8–16 mph        | Rolling, 3 % @ 2 × speed | Energising, constant swell     |
-| 2 | **Mediterranean (Italian Coast)** | 4–10 mph        | Gentle, 1.5 % @ 1.6 ×    | Relaxed, great for reading     |
-| 3 | **Countryside (French Fields)**   | 2–8 mph         | Rare, 0.8 % @ 1.4 ×      | Whisper‑quiet, ideal for sleep |
-| 4 | **Mountains (Alpine Range)**      | 6–18 mph        | Sharp, 5 % @ 2.3 ×       | Crisp, invigorating shifts     |
-| 5 | **Plains (Patagonian Steppes)**   | 10–22 mph       | Sustained, 8 % @ 2.5 ×   | Strongest airflow, hot days    |
-| 6 | **Fjord (Norwegian Fjords)**      | 8–20 mph        | Channeled, 6 % @ 2.4 ×   | Dramatic, funnel‑like gusts    |
-| 7 | **Manual**                        | —               | —                        | Direct user control            |
+![Breezer9000](https://raw.githubusercontent.com/TilmanGriesel/WindScape/843b6eca3a42019fdb35a68ddca5e0dcae5bd2b5/docs/title.png?raw=true)
 
 ---
 
@@ -283,6 +272,21 @@ _Thanks and credit to @mwood77_
 2. Add Wi‑Fi credentials in `secrets.yaml`.
 3. Reboot—the device will auto‑discover in Home Assistant.
 
+
+---
+
+## Preset Library
+
+| # | Preset                            | Base Wind Range | Gust Style               | Character                      |
+| - | --------------------------------- | --------------- | ------------------------ | ------------------------------ |
+| 1 | **Ocean (Atlantic Coast)**        | 8–16 mph        | Rolling, 3 % @ 2 × speed | Energising, constant swell     |
+| 2 | **Mediterranean (Italian Coast)** | 4–10 mph        | Gentle, 1.5 % @ 1.6 ×    | Relaxed, great for reading     |
+| 3 | **Countryside (French Fields)**   | 2–8 mph         | Rare, 0.8 % @ 1.4 ×      | Whisper‑quiet, ideal for sleep |
+| 4 | **Mountains (Alpine Range)**      | 6–18 mph        | Sharp, 5 % @ 2.3 ×       | Crisp, invigorating shifts     |
+| 5 | **Plains (Patagonian Steppes)**   | 10–22 mph       | Sustained, 8 % @ 2.5 ×   | Strongest airflow, hot days    |
+| 6 | **Fjord (Norwegian Fjords)**      | 8–20 mph        | Channeled, 6 % @ 2.4 ×   | Dramatic, funnel‑like gusts    |
+| 7 | **Manual**                        | —               | —                        | Direct user control            |
+
 ---
 
 ## Configuration Reference
@@ -344,13 +348,13 @@ WindScape cycles through **Quiet**, **Medium**, and **High‑Activity** weather 
 * **Noctua Fans & Accessories** – [https://noctua.at/](https://noctua.at/)
   * https://noctua.at/en/nf-a12x25-pwm
   * https://noctua.at/en/nv-aa1-12
+  * Noctua NV-FS1 YT Review: https://youtu.be/9PvWBuDTGDo
 * **DIY Fan Mount STL files**
   * https://www.printables.com/model/554226-120mm-computer-fan-desk-mount
   * https://www.printables.com/model/1324299-pc-desk-fan
   * https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
 * **ir2mqtt** (iRacing telemetry → MQTT) – [https://github.com/jmlt/ir2mqtt](https://github.com/jmlt/ir2mqtt)
 * **Moodist** (ambient engine) – [https://github.com/remvze/moodist](https://github.com/remvze/moodist)
-
 ---
 
 *© 2025  WindScape. Licensed under the MIT License unless noted otherwise.*
