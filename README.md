@@ -84,7 +84,20 @@ WindScape delivers authentic, location‑inspired airflow—from a gentle Medite
 
 ## Build Guides
 
-### 5 V Fan (USB‑Powered)
+Which build you choose depends on the fan you pair with the project. In general, a 5 V fan makes things simpler because it can be powered from any USB‑A 3.0 or USB‑C port, a power bank, or a low‑wattage wall adapter.
+
+### Hardware
+
+* **Microcontroller** – Any ESP32 development board with built‑in Wi‑Fi (widely available for about €3).
+* **Fan** – Any 5 V PC case fan that supports PWM (pulse‑width modulation).
+
+### Fan Selection
+
+There’s no single “required” fan, just make sure it supports PWM speed control. A great premium option is the **Noctua NF‑A12x25 5 V**, which is exceptionally quiet and can run at duty cycles as low as 5 %.
+
+When comparing noise levels, remember that the decibel (dB) scale is logarithmic: even small changes in the number can mean a significant audible difference.
+
+### 5 V Fan (DIY USB‑Powered & Simple)
 
 <details>
 <summary>Bill of Materials & Wiring</summary>
@@ -141,9 +154,11 @@ WindScape delivers authentic, location‑inspired airflow—from a gentle Medite
 
 </details>
 
+_Thanks and credit to @mwood77_
+
 ---
 
-### 12 V Fan
+### 12 V Fan (Noctua NV‑FS1 Fan Kit or DIY)
 
 <details>
 <summary>Bill of Materials & Wiring</summary>
@@ -327,7 +342,12 @@ WindScape cycles through **Quiet**, **Medium**, and **High‑Activity** weather 
 * **Home Assistant** – [https://www.home-assistant.io/](https://www.home-assistant.io/)
 * **ESPHome** – [https://esphome.io/](https://esphome.io/)
 * **Noctua Fans & Accessories** – [https://noctua.at/](https://noctua.at/)
-* **DIY Fan Mount STL files** – [https://www.printables.com/](https://www.printables.com/)
+  * https://noctua.at/en/nf-a12x25-pwm
+  * https://noctua.at/en/nv-aa1-12
+* **DIY Fan Mount STL files**
+  * https://www.printables.com/model/554226-120mm-computer-fan-desk-mount
+  * https://www.printables.com/model/1324299-pc-desk-fan
+  * https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
 * **ir2mqtt** (iRacing telemetry → MQTT) – [https://github.com/jmlt/ir2mqtt](https://github.com/jmlt/ir2mqtt)
 * **Moodist** (ambient engine) – [https://github.com/remvze/moodist](https://github.com/remvze/moodist)
 
