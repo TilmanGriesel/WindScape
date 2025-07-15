@@ -4,16 +4,59 @@ WindScape is a Home Assistant ESPHome project that transforms ordinary PC fans i
 The main goal is to create realistic, location-inspired wind patterns that mimic the feeling of natural outdoor breezes - from gentle Mediterranean coastal winds to dramatic Alpine gusts - bringing a more organic and soothing airflow experience to your indoor workspace.
 
 ## Features
-- **Randomized Wind Simulation Engine** with natural weather phases
-- **6 Location Presets** inspired by real-world locations
-- **100-level speed control**
-- **Real-time RPM monitoring** (optional sensor)
-- **Wireless control** via Home Assistant and WiFI
-- **Automation-Ready** via Home Assistant, combine sensors to set presets and parameters
-- **OTA firmware updates** via ESPHome
-- **Weather phase system** (quiet air/medium conditions/high activity)
 
-## Wind Mode Presets
+* **Dynamic Wind Simulation Engine**
+  Realistic, randomized airflow patterns with smooth transitions between natural weather phases (quiet, moderate, and high activity).
+
+* **6 Real-World Inspired Location Presets**
+  Includes presets based on the feel of different outdoor environments.
+
+* **Manual Speed Control**
+  Manual or automated fan speed control for precise airflow settings.
+
+* **External Wind Sensor Support**
+  Automatically reacts to external sensor input (e.g., racing simulator car speed via MQTT), with fallback to last preset if the sensor becomes inactive.
+
+* **Automation-Ready**
+  Easily combine Home Assistant sensors and triggers to dynamically change presets, wind behavior, and speed.
+
+* **Real-Time RPM Monitoring**
+  Monitor actual fan RPM using an external sensor for feedback and diagnostics.
+
+* **Seamless Wireless Control**
+  Full integration with Home Assistant over Wi-Fi for remote control and automation.
+
+* **Over-the-Air (OTA) Firmware Updates**
+  Powered by ESPHome for easy wireless updates and maintenance.
+
+
+## WindScape Modes Overview
+
+### 1. Oscillating Mode (Wind Simulation)
+When oscillation is enabled, WindScape activates its wind simulation mode. The fan mimics dynamic airflow patterns.
+
+### 2. Steady Mode (Constant Breeze)
+If oscillation is turned off, WindScape defaults to a steady breeze mode, delivering a constant, non-varying airflow.
+
+### 3. External Sensor Mode (Dynamic Airflow via Sensor Data)
+You can configure WindScape in the substitutions to use a Home Assistant sensor that reports wind speed in km/h. When this sensor is actively publishing data, the fan automatically switches to **external mode**, allowing WindScape to respond to real-time wind data—ideal for simulating motion in racing simulators like **iRacing** via [ir2mqtt](https://github.com/jmlt/ir2mqtt), or for other sensor-based use cases.
+
+If the external sensor stops sending updates for over a minute, WindScape will automatically revert to the **last selected preset**.
+
+##### Additional Notes
+
+* The **fan power control** functions as a global override.
+* Presets are managed through Home Assistant’s fan preset system.
+* Fine-tuning options like gust frequency, maximum fan speed, and more can be configured in the device settings.
+
+
+![config](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_01.gif?raw=true)
+
+![dash](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_02.gif?raw=true)
+
+![external_sensor](https://github.com/TilmanGriesel/WindScape/blob/main/docs/ha_iracing_01.png?raw=true)
+
+## Presets
 
 Transform the atmosphere of your room with realistic wind profiles inspired by beautiful locations around the world. Each preset configures different wind speed ranges, gust characteristics, and weather phase behaviors to create unique atmospheric experiences.
 
@@ -23,15 +66,11 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 - **Weather Phases:** Balanced transitions with sustained medium and high activity periods
 - **Experience:** Like standing on a breezy beach with consistent ocean winds and rolling wave-like gusts. Great for energizing, consistent airflow.
 
-<img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/plage.png?raw=true" width="100">
-
 #### 2. Mediterranean (Italian Coast)
 - **Wind Range:** 4-10 mph (light to gentle breeze)
 - **Gust Behavior:** Gentle, infrequent gusts (1.5% probability, 1.6x intensity, 2.5s duration)
 - **Weather Phases:** Longer quiet periods, shorter high activity phases
 - **Experience:** Soft coastal breeze perfect for relaxation, reading, or background airflow. Gentle enough for sleep yet alive enough to feel natural.
-
-<img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/capri.png?raw=true" width="100">
 
 #### 3. Countryside (French Fields)
 - **Wind Range:** 2-8 mph (calm to light breeze)
@@ -39,15 +78,11 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 - **Weather Phases:** Extended quiet periods, very gentle high activity
 - **Experience:** Whisper-quiet rural air with minimal variation. Perfect for sleeping, meditation, or when you want barely-noticeable natural airflow.
 
-<img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/valensole.png?raw=true" width="100">
-
 #### 4. Mountains (Alpine Range)
 - **Wind Range:** 6-18 mph (moderate to strong breeze)
 - **Gust Behavior:** Sharp, frequent gusts (5% probability, 2.3x intensity, 2s duration)
 - **Weather Phases:** Quick transitions, shorter phases, dramatic weather changes
 - **Experience:** Crisp mountain air with sudden wind shifts and sharp gusts. Ideal for creating an invigorating alpine atmosphere indoors.
-
-<img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/alpine.png?raw=true" width="100">
 
 #### 5. Plains (Patagonian Steppes)
 - **Wind Range:** 10-22 mph (fresh to strong breeze)
@@ -55,20 +90,17 @@ Transform the atmosphere of your room with realistic wind profiles inspired by b
 - **Weather Phases:** High activity periods are intense and frequent
 - **Experience:** The windiest preset - constant strong airflow with powerful gusts. Maximum performance for hot days or when you want dramatic atmospheric effects.
 
-<img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/patagonia.png?raw=true" width="100">
-
 #### 6. Fjord (Norwegian Fjords)
 - **Wind Range:** 8-20 mph (moderate to strong breeze)
 - **Gust Behavior:** Channeled, dramatic gusts (6% probability, 2.4x intensity, 3.5s duration)
 - **Weather Phases:** Unpredictable transitions mimicking fjord wind patterns
 - **Experience:** Dynamic airflow that feels like wind funneling between cliffs. Unique, immersive experience with surprising intensity changes.
 
-<img src="https://github.com/TilmanGriesel/WindScape/blob/main/docs/fjord.png?raw=true" width="100">
-
 #### 7. Manual Mode
 
 - **Feel:** Whatever you choose
 - **Experience:** Full control. No simulation, just direct manual speed adjustment, great for testing, automations or when you want a consistent fan output without variation.
+
 
 ## Build Instructions & Hardware Setup
 
