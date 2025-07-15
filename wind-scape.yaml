@@ -11,15 +11,19 @@ substitutions:
   fan_speed_max: "100"
   fan_speed_default: "80"
   
-  # Update intervals
-  base_update_interval: "2000ms"
-  gust_check_interval: "1000ms"
+  # Base timing intervals
   sensor_update_interval: "1s"
+  
+  # External sensor configuration
+  external_kmh_sensor_entity: "sensor.my_speed_in_kmh"  # Change this to your HA entity
+  external_max_kmh: "160"  # KMH that maps to 100% fan speed
+  external_min_kmh: "0"    # KMH that maps to 10% fan speed
+  external_sensor_update_interval: "200ms"
 
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
-  comment: "PWM fan controller with wind simulation"
+  comment: "PWM fan controller with realistic randomized wind simulation"
 
 esp32:
   board: esp32dev
@@ -86,6 +90,28 @@ fan:
 # ====================================================================================
 
 sensor:
+  # External Home Assistant sensor
+  - platform: homeassistant
+    name: "External Speed km/h"
+    id: external_kmh_input
+    entity_id: ${external_kmh_sensor_entity}
+    unit_of_measurement: "km/h"
+    icon: "mdi:weather-windy"
+    accuracy_decimals: 1
+    filters:
+      - lambda: |-
+          if (isnan(x) || x < 0) return 0.0;
+          return x;
+    on_value:
+      - if:
+          condition:
+            lambda: 'return id(wind_mode_select).state != "External Sensor";'
+          then:
+            - logger.log: "Auto-switching to External Sensor mode due to sensor data"
+            - select.set:
+                id: wind_mode_select
+                option: "External Sensor"
+
   # Fan RPM monitoring
   - platform: pulse_counter
     pin:
@@ -102,11 +128,11 @@ sensor:
     filters:
       - multiply: 0.5
 
-  # Current simulated wind speed
+  # Current wind speed
   - platform: template
     name: "Wind Speed"
     id: wind_speed_sensor
-    unit_of_measurement: "mph"
+    unit_of_measurement: "m/s"
     icon: "mdi:weather-windy"
     accuracy_decimals: 1
     state_class: "measurement"
@@ -164,7 +190,7 @@ number:
     mode: slider
     optimistic: true
 
-  # How often gusts occur
+  # How often gusts occur (affects probability)
   - platform: template
     name: "Gust Frequency"
     id: gust_frequency
@@ -178,7 +204,7 @@ number:
     mode: slider
     optimistic: true
 
-  # Wind variation amount
+  # Minimum wind variation to prevent stagnation
   - platform: template
     name: "Wind Variability"
     id: wind_variability
@@ -220,7 +246,7 @@ number:
     mode: slider
     optimistic: true
 
-# Wind environment presets
+# Location-based wind profiles
 select:
   - platform: template
     name: "Wind Mode"
@@ -233,36 +259,13 @@ select:
       - "Mountains"
       - "Plains"
       - "Fjord"
+      - "External Sensor"
       - "Manual"
     initial_option: "Ocean"
     restore_value: true
     optimistic: true
     on_value:
       - script.execute: handle_mode_change
-
-# Wind status displays
-text_sensor:
-  - platform: template
-    name: "Wind Condition"
-    id: wind_condition_sensor
-    icon: "mdi:weather-windy"
-    update_interval: ${sensor_update_interval}
-
-  - platform: template
-    name: "Current Wind State"
-    id: wind_state_sensor
-    icon: "mdi:information-outline"
-    update_interval: 5s
-
-  - platform: template
-    name: "Current Weather Phase"
-    id: weather_phase_sensor
-    icon: "mdi:weather-partly-cloudy"
-    update_interval: 5s
-    lambda: |-
-      if (id(current_weather_phase) == 0) return {"Quiet Air"};
-      else if (id(current_weather_phase) == 1) return {"Medium Conditions"};
-      else return {"High Activity"};
 
 # System status
 binary_sensor:
@@ -277,7 +280,7 @@ binary_sensor:
       return id(wind_simulation_active);
 
 # ====================================================================================
-# SIMULATION STATE VARIABLES
+# GLOBAL STATE VARIABLES
 # ====================================================================================
 
 globals:
@@ -291,12 +294,12 @@ globals:
   - id: current_wind_speed
     type: float
     restore_value: false
-    initial_value: '8.0'
+    initial_value: '3.6'
     
   - id: target_wind_speed
     type: float
     restore_value: false
-    initial_value: '8.0'
+    initial_value: '3.6'
     
   - id: wind_change_rate
     type: float
@@ -329,17 +332,17 @@ globals:
     restore_value: false
     initial_value: '0.0'
     
-  # Wind behavior parameters set by location and phase
+  # Wind behavior parameters (set by location and phase)
   - id: base_wind_min
     type: float
     restore_value: false
-    initial_value: '5.0'
-    
+    initial_value: '2.2'
+
   - id: base_wind_max
     type: float
     restore_value: false
-    initial_value: '15.0'
-    
+    initial_value: '6.7'
+
   - id: gust_probability_base
     type: float
     restore_value: false
@@ -350,11 +353,11 @@ globals:
     restore_value: false
     initial_value: '1.8'
     
-  # Weather phase system (3 phases: quiet, medium, high activity)
+  # Weather phase system
   - id: current_weather_phase
     type: int
     restore_value: false
-    initial_value: '1'
+    initial_value: '1'  # 0=quiet, 1=medium, 2=high
     
   - id: phase_start_time
     type: float
@@ -377,11 +380,11 @@ globals:
     initial_value: '15.0'
 
 # ====================================================================================
-# WIND SIMULATION ALGORITHMS
+# RANDOMIZED WIND SIMULATION ENGINE
 # ====================================================================================
 
 script:
-  # Apply fan speed with safety limits and intensity scaling
+  # Apply fan speed with safety limits
   - id: apply_fan_speed
     parameters:
       speed_percent: float
@@ -406,18 +409,43 @@ script:
             id(fan_pwm_output).set_level(requested_speed);
           }
 
-  # Generate new random wind target speed
+  # External sensor input processing
+  - id: process_external_sensor_data
+    then:
+      - lambda: |-
+          if (id(wind_mode_select).state != "External Sensor") return;
+          
+          float kmh = id(external_kmh_input).state;
+          if (isnan(kmh) || kmh < 0) kmh = 0;
+          
+          // Map KMH to fan percentage: 0 KMH = 10%, max_kmh = 100%
+          float max_kmh = ${external_max_kmh};
+          float min_percent = 10.0f;
+          float max_percent = 100.0f;
+          
+          float fan_percent;
+          if (kmh <= 0) {
+            fan_percent = 0; // Turn off fan when no wind
+          } else {
+            fan_percent = min_percent + ((kmh / max_kmh) * (max_percent - min_percent));
+            fan_percent = fmax(min_percent, fmin(max_percent, fan_percent));
+          }
+          
+          ESP_LOGD("wind", "External Sensor: %.1f km/h -> %.1f%% fan", kmh, fan_percent);
+          id(apply_fan_speed).execute(fan_percent);
+
+  # Generate new random wind target
   - id: generate_wind_target
     then:
       - lambda: |-
           if (!id(wind_simulation_active)) return;
           
-          // Use phase-specific wind range
+          // Use phase-specific wind range instead of base range
           float range = id(phase_wind_max) - id(phase_wind_min);
           float random_factor = (esp_random() % 1000) / 1000.0f;
           float new_target = id(phase_wind_min) + (random_factor * range);
           
-          // Add bias toward moderate values within the phase range
+          // Add some bias toward moderate values within the phase range
           float bias_factor = (esp_random() % 1000) / 1000.0f;
           new_target = (new_target + (id(phase_wind_min) + id(phase_wind_max)) * 0.5f * bias_factor) / (1.0f + bias_factor);
           
@@ -427,11 +455,11 @@ script:
           float variability = id(wind_variability).state / 100.0f;
           float base_rate;
           
-          if (id(current_weather_phase) == 0) {
+          if (id(current_weather_phase) == 0) {      // Quiet phase - slower changes
             base_rate = 0.08f + (variability * 0.12f);
-          } else if (id(current_weather_phase) == 2) {
+          } else if (id(current_weather_phase) == 2) { // High phase - faster changes  
             base_rate = 0.25f + (variability * 0.35f);
-          } else {
+          } else {                                   // Medium phase - normal
             base_rate = 0.15f + (variability * 0.25f);
           }
           
@@ -441,7 +469,7 @@ script:
           ESP_LOGD("wind", "Phase %d target: %.1f mph, rate: %.3f", 
                    id(current_weather_phase), id(target_wind_speed), id(wind_change_rate));
 
-  # Weather phase management with transition logic
+  # Weather phase management
   - id: update_weather_phase
     then:
       - lambda: |-
@@ -454,12 +482,12 @@ script:
             int old_phase = id(current_weather_phase);
             float random_val = (esp_random() % 100) / 100.0f;
             
-            // Phase transition probabilities
+            // Natural phase transitions with realistic probabilities
             if (id(current_weather_phase) == 0) {        // Currently quiet
               if (random_val < 0.6f) {
                 id(current_weather_phase) = 1;           // 60% -> medium
               } else {
-                id(current_weather_phase) = 2;           // 40% -> high
+                id(current_weather_phase) = 2;           // 40% -> high (sudden storms)
               }
             } else if (id(current_weather_phase) == 1) { // Currently medium
               if (random_val < 0.3f) {
@@ -471,45 +499,46 @@ script:
               }
             } else {                                     // Currently high
               if (random_val < 0.4f) {
-                id(current_weather_phase) = 1;           // 40% -> medium
+                id(current_weather_phase) = 1;           // 40% -> medium (gradual calming)
               } else if (random_val < 0.7f) {
-                id(current_weather_phase) = 0;           // 30% -> quiet
+                id(current_weather_phase) = 0;           // 30% -> quiet (sudden calm)
               } else {
                 id(current_weather_phase) = 2;           // 30% -> stay high
               }
             }
             
-            // Set phase duration
-            if (id(current_weather_phase) == 0) {
-              id(phase_duration) = 90.0f + (esp_random() % 120);
-            } else if (id(current_weather_phase) == 1) {
-              id(phase_duration) = 120.0f + (esp_random() % 180);
-            } else {
-              id(phase_duration) = 60.0f + (esp_random() % 90);
+            // Set phase duration based on new phase
+            if (id(current_weather_phase) == 0) {        // Quiet phases
+              id(phase_duration) = 90.0f + (esp_random() % 120); // 1.5-3.5 minutes
+            } else if (id(current_weather_phase) == 1) { // Medium phases  
+              id(phase_duration) = 120.0f + (esp_random() % 180); // 2-5 minutes
+            } else {                                     // High activity phases
+              id(phase_duration) = 60.0f + (esp_random() % 90);  // 1-2.5 minutes
             }
             
             id(phase_start_time) = current_time;
             
             // Update phase-specific wind ranges
-            if (id(current_weather_phase) == 0) {
+            if (id(current_weather_phase) == 0) {        // Quiet phase
               id(phase_wind_min) = id(base_wind_min) * 0.3f;
               id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.4f;
-            } else if (id(current_weather_phase) == 1) {
+            } else if (id(current_weather_phase) == 1) { // Medium phase
               id(phase_wind_min) = id(base_wind_min) * 0.7f;
               id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.8f;
-            } else {
+            } else {                                     // High phase
               id(phase_wind_min) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.4f;
-              id(phase_wind_max) = id(base_wind_max) * 1.2f;
+              id(phase_wind_max) = id(base_wind_max) * 1.2f; // Can exceed base max during storms
             }
             
-            // Clamp ranges to reasonable limits
-            id(phase_wind_min) = fmax(1.0f, id(phase_wind_min));
-            id(phase_wind_max) = fmin(25.0f, id(phase_wind_max));
+            // Clamp phase ranges to reasonable limits
+            id(phase_wind_min) = fmax(0.4f, id(phase_wind_min));
+            id(phase_wind_max) = fmin(11.2f, id(phase_wind_max));
             
             ESP_LOGI("wind", "Phase change %d->%d: range %.1f-%.1f mph, duration %.0fs", 
                      old_phase, id(current_weather_phase), 
                      id(phase_wind_min), id(phase_wind_max), id(phase_duration));
             
+            // Force new wind target for the new phase
             id(generate_wind_target).execute();
           }
 
@@ -519,43 +548,47 @@ script:
       - lambda: |-
           if (!id(wind_simulation_active)) return;
           
+          // Update weather phase first
           id(update_weather_phase).execute();
           
           float current_time = millis() / 1000.0f;
           
-          // Move current wind toward target
+          // Smoothly move current wind toward target
           float target = id(target_wind_speed);
           float current = id(current_wind_speed);
           float change_rate = id(wind_change_rate);
           
+          // Simple linear interpolation toward target
           float difference = target - current;
           float change = difference * change_rate;
           
-          // Phase-specific turbulence
+          // Phase-specific micro-turbulence
           float turb_intensity;
-          if (id(current_weather_phase) == 0) {
+          if (id(current_weather_phase) == 0) {        // Quiet - minimal turbulence
             turb_intensity = 0.2f;
-          } else if (id(current_weather_phase) == 2) {
+          } else if (id(current_weather_phase) == 2) { // High - strong turbulence
             turb_intensity = 1.2f;
-          } else {
+          } else {                                     // Medium - moderate turbulence
             turb_intensity = 0.6f;
           }
           
           float micro_turb = ((esp_random() % 200) - 100) / 100.0f * turb_intensity;
           
           id(current_wind_speed) = current + change + micro_turb;
-          id(current_wind_speed) = fmax(1.0f, fmin(25.0f, id(current_wind_speed)));
+          
+          // Clamp to reasonable bounds
+          id(current_wind_speed) = fmax(0.4f, fmin(11.2f, id(current_wind_speed)));
           
           // Phase-specific target change behavior
           float change_threshold = 2.0f;
-          float close_change_chance = 40.0f;
-          float far_change_chance = 10.0f;
+          float close_change_chance = 40.0f;  // Base chance when close
+          float far_change_chance = 10.0f;    // Base chance when far
           
-          if (id(current_weather_phase) == 0) {
+          if (id(current_weather_phase) == 0) {        // Quiet - less frequent changes
             close_change_chance = 25.0f;
             far_change_chance = 5.0f;
             change_threshold = 1.5f;
-          } else if (id(current_weather_phase) == 2) {
+          } else if (id(current_weather_phase) == 2) { // High - more frequent changes
             close_change_chance = 60.0f;
             far_change_chance = 20.0f;
             change_threshold = 3.0f;
@@ -580,12 +613,12 @@ script:
           id(wind_speed_sensor).publish_state(final_wind);
           
           // Convert to fan percentage (15% to 85% range)
-          float fan_percent = 15.0f + ((final_wind - 1.0f) / 24.0f) * 70.0f;
+          float fan_percent = 15.0f + ((final_wind - 0.4f) / 10.8f) * 70.0f;
           fan_percent = fmax(15.0f, fmin(85.0f, fan_percent));
           
           id(apply_fan_speed).execute(fan_percent);
 
-  # Gust simulation system
+  # Randomized gust system
   - id: check_for_gusts
     then:
       - lambda: |-
@@ -593,31 +626,33 @@ script:
           
           float current_time = millis() / 1000.0f;
           
-          // If gust is active, update or end it
+          // If gust is active, check if it should end
           if (id(gust_active)) {
             float gust_age = current_time - id(gust_start_time);
             
             if (gust_age >= id(gust_duration)) {
+              // End gust
               id(gust_active) = false;
               id(gust_intensity) = 1.0f;
               id(gust_active_sensor).publish_state(0);
               ESP_LOGI("wind", "Gust ended after %.1f seconds", gust_age);
             } else {
-              // Update gust intensity with envelope curve
+              // Update gust intensity with smooth curves
               float progress = gust_age / id(gust_duration);
               float envelope;
               
               if (progress < 0.3f) {
-                // Quick build-up
+                // Quick build-up (0-30% of duration)
                 envelope = progress / 0.3f;
-                envelope = 1.0f - pow(1.0f - envelope, 2.0f);
+                envelope = 1.0f - pow(1.0f - envelope, 2.0f); // Ease-out curve
               } else if (progress < 0.7f) {
-                // Sustain with variation
+                // Sustain with slight variation (30-70% of duration)
                 envelope = 1.0f;
+                // Add some random variation during sustain
                 float variation = sin(gust_age * 2.0f) * 0.1f * ((esp_random() % 100) / 100.0f);
                 envelope += variation;
               } else {
-                // Decay
+                // Decay (70-100% of duration)
                 float decay_progress = (progress - 0.7f) / 0.3f;
                 envelope = 1.0f - (decay_progress * decay_progress);
               }
@@ -628,7 +663,7 @@ script:
             return;
           }
           
-          // Rate limit gust checks
+          // Check if enough time has passed since last check
           if (current_time - id(last_gust_check) < 1.5f) return;
           id(last_gust_check) = current_time;
           
@@ -637,33 +672,36 @@ script:
           float user_freq = id(gust_frequency).state / 100.0f;
           float phase_multiplier;
           
-          if (id(current_weather_phase) == 0) {
+          if (id(current_weather_phase) == 0) {        // Quiet phase - fewer but still possible gusts
             phase_multiplier = 0.4f;
-          } else if (id(current_weather_phase) == 2) {
+          } else if (id(current_weather_phase) == 2) { // High phase - frequent gusts
             phase_multiplier = 2.5f;
-          } else {
+          } else {                                     // Medium phase - normal gusts
             phase_multiplier = 1.0f;
           }
           
           float final_prob = base_prob * user_freq * phase_multiplier;
+          
+          // Random chance for gust
           float random_val = (esp_random() % 10000) / 10000.0f;
           
           if (random_val < final_prob) {
+            // Start new gust with phase-appropriate characteristics
             id(gust_active) = true;
             id(gust_start_time) = current_time;
             
-            // Phase-specific gust characteristics
+            // Phase-specific gust duration and intensity
             float duration_base, intensity_base;
             
-            if (id(current_weather_phase) == 0) {
-              duration_base = 2.0f + ((esp_random() % 100) / 100.0f) * 4.0f;
-              intensity_base = 1.1f + ((esp_random() % 100) / 100.0f) * 0.4f;
-            } else if (id(current_weather_phase) == 2) {
-              duration_base = 1.0f + ((esp_random() % 100) / 100.0f) * 3.0f;
-              intensity_base = 1.4f + ((esp_random() % 100) / 100.0f) * 1.0f;
-            } else {
-              duration_base = 1.5f + ((esp_random() % 100) / 100.0f) * 5.0f;
-              intensity_base = 1.2f + ((esp_random() % 100) / 100.0f) * 0.6f;
+            if (id(current_weather_phase) == 0) {        // Quiet phase
+              duration_base = 2.0f + ((esp_random() % 100) / 100.0f) * 4.0f; // 2-6s
+              intensity_base = 1.1f + ((esp_random() % 100) / 100.0f) * 0.4f; // 1.1-1.5x
+            } else if (id(current_weather_phase) == 2) { // High phase
+              duration_base = 1.0f + ((esp_random() % 100) / 100.0f) * 3.0f; // 1-4s
+              intensity_base = 1.4f + ((esp_random() % 100) / 100.0f) * 1.0f; // 1.4-2.4x
+            } else {                                     // Medium phase
+              duration_base = 1.5f + ((esp_random() % 100) / 100.0f) * 5.0f; // 1.5-6.5s
+              intensity_base = 1.2f + ((esp_random() % 100) / 100.0f) * 0.6f; // 1.2-1.8x
             }
             
             id(gust_duration) = duration_base;
@@ -675,73 +713,11 @@ script:
                      id(gust_duration), id(gust_intensity));
           }
 
-  # Generate wind description based on Beaufort scale
-  - id: update_wind_description
-    then:
-      - lambda: |-
-          float wind_mph = id(wind_speed_sensor).state;
-          bool gust_is_active = id(gust_active);
-          
-          std::string description = "";
-          std::string state_info = "";
-          
-          // Beaufort scale mapping
-          if (wind_mph < 4) {
-            description = "Calm";
-          } else if (wind_mph < 8) {
-            description = "Light breeze";
-          } else if (wind_mph < 12) {
-            description = "Gentle breeze";
-          } else if (wind_mph < 18) {
-            description = "Moderate breeze";
-          } else {
-            description = "Fresh breeze";
-          }
-          
-          // Add phase context
-          if (id(current_weather_phase) == 0) {
-            description = "Quiet " + description;
-          } else if (id(current_weather_phase) == 2) {
-            description = "Active " + description;
-          }
-          
-          if (gust_is_active) {
-            description += " with gusts";
-            state_info = "Gust active";
-          } else {
-            float target_diff = abs(id(target_wind_speed) - id(current_wind_speed));
-            if (target_diff > 2.0f) {
-              if (id(target_wind_speed) > id(current_wind_speed)) {
-                state_info = "Wind building";
-              } else {
-                state_info = "Wind calming";
-              }
-            } else {
-              // Show phase time remaining
-              float phase_elapsed = (millis() / 1000.0f) - id(phase_start_time);
-              float phase_remaining = id(phase_duration) - phase_elapsed;
-              if (phase_remaining > 60) {
-                state_info = "Phase: " + std::to_string((int)(phase_remaining / 60)) + "m remaining";
-              } else {
-                state_info = "Phase: " + std::to_string((int)phase_remaining) + "s remaining";
-              }
-            }
-          }
-          
-          // Add location context
-          std::string mode = id(wind_mode_select).state;
-          if (mode != "Manual") {
-            description += " (" + mode + ")";
-          }
-          
-          id(wind_condition_sensor).publish_state(description);
-          id(wind_state_sensor).publish_state(state_info);
-
 # ====================================================================================
 # SIMULATION CONTROL & MODE MANAGEMENT
 # ====================================================================================
 
-  # Handle wind mode changes and set location parameters
+  # Handle wind mode changes
   - id: handle_mode_change
     then:
       - lambda: |-
@@ -751,6 +727,7 @@ script:
           // Stop simulation
           id(wind_simulation_loop).stop();
           id(gust_check_loop).stop();
+          id(external_sensor_loop).stop();
           id(wind_simulation_active) = false;
           
           // Reset gust state
@@ -762,49 +739,53 @@ script:
       - lambda: |-
           std::string mode = id(wind_mode_select).state;
           
-          if (mode != "Manual") {
-            // Set location-specific parameters
+          if (mode == "External Sensor") {
+            // Start external sensor processing
+            id(external_sensor_loop).execute();
+            ESP_LOGI("wind", "External Sensor mode activated");
+          } else if (mode != "Manual") {
+          // Set location-specific parameters (converted to m/s)
             if (mode == "Ocean") {
-              id(base_wind_min) = 8.0f;
-              id(base_wind_max) = 16.0f;
+              id(base_wind_min) = 3.6f;
+              id(base_wind_max) = 7.2f;
               id(gust_probability_base) = 0.03f;
               id(location_gust_strength) = 2.0f;
             } else if (mode == "Mediterranean") {
-              id(base_wind_min) = 4.0f;
-              id(base_wind_max) = 10.0f;
+              id(base_wind_min) = 1.8f;
+              id(base_wind_max) = 4.5f;
               id(gust_probability_base) = 0.015f;
               id(location_gust_strength) = 1.6f;
             } else if (mode == "Countryside") {
-              id(base_wind_min) = 2.0f;
-              id(base_wind_max) = 8.0f;
+              id(base_wind_min) = 0.9f;
+              id(base_wind_max) = 3.6f;
               id(gust_probability_base) = 0.008f;
               id(location_gust_strength) = 1.4f;
             } else if (mode == "Mountains") {
-              id(base_wind_min) = 6.0f;
-              id(base_wind_max) = 18.0f;
+              id(base_wind_min) = 2.7f;
+              id(base_wind_max) = 8.0f;
               id(gust_probability_base) = 0.05f;
               id(location_gust_strength) = 2.3f;
             } else if (mode == "Plains") {
-              id(base_wind_min) = 10.0f;
-              id(base_wind_max) = 22.0f;
+              id(base_wind_min) = 4.5f;
+              id(base_wind_max) = 9.8f;
               id(gust_probability_base) = 0.08f;
               id(location_gust_strength) = 2.5f;
             } else if (mode == "Fjord") {
-              id(base_wind_min) = 8.0f;
-              id(base_wind_max) = 20.0f;
+              id(base_wind_min) = 3.6f;
+              id(base_wind_max) = 8.9f;
               id(gust_probability_base) = 0.06f;
               id(location_gust_strength) = 2.4f;
             }
             
-            // Initialize wind state
+            // Initialize wind state with phase-specific ranges
             float mid_range = (id(base_wind_min) + id(base_wind_max)) * 0.5f;
             id(current_wind_speed) = mid_range;
             id(target_wind_speed) = mid_range;
             
             // Initialize phase system
-            id(current_weather_phase) = 1;
+            id(current_weather_phase) = 1; // Start with medium phase
             id(phase_start_time) = millis() / 1000.0f;
-            id(phase_duration) = 120.0f;
+            id(phase_duration) = 120.0f; // 2 minutes initial phase
             
             // Set initial phase ranges (medium)
             id(phase_wind_min) = id(base_wind_min) * 0.7f;
@@ -832,8 +813,7 @@ script:
             lambda: 'return id(wind_simulation_active);'
           then:
             - script.execute: calculate_wind_simulation
-            - script.execute: update_wind_description
-            - delay: !lambda 'return 200 + (esp_random() % 300);' # 200-500ms random
+            - delay: !lambda 'return 200 + (esp_random() % 300);'
 
   # Gust check loop
   - id: gust_check_loop
@@ -846,6 +826,17 @@ script:
             - script.execute: check_for_gusts
             - delay: !lambda 'return 200 + (esp_random() % 600);' # 200-800ms random
 
+  # External sensor loop
+  - id: external_sensor_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return id(wind_mode_select).state == "External Sensor";'
+          then:
+            - script.execute: process_external_sensor_data
+            - delay: ${external_sensor_update_interval}
+
 # ====================================================================================
 # USER INTERFACE
 # ====================================================================================
@@ -853,21 +844,3 @@ script:
 button:
   - platform: restart
     name: "${friendly_name} Restart"
-
-# ====================================================================================
-# SYSTEM MAINTENANCE
-# ====================================================================================
-
-interval:
-  # Periodic system nudges to prevent stagnation
-  - interval: 30s
-    then:
-      - lambda: |-
-          if (id(wind_simulation_active)) {
-            // 20% chance to nudge the system if it seems stuck
-            float target_diff = abs(id(target_wind_speed) - id(current_wind_speed));
-            if (target_diff < 0.5f && (esp_random() % 100) < 20) {
-              id(generate_wind_target).execute();
-              ESP_LOGD("wind", "Maintenance wind nudge");
-            }
-          }
