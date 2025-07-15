@@ -1,144 +1,104 @@
-![title](https://github.com/TilmanGriesel/WindScape/blob/main/docs/title.png?raw=true)
+![WindScape Title](https://github.com/TilmanGriesel/WindScape/blob/main/docs/title.png?raw=true)
 
-WindScape is a Home Assistant ESPHome project that transforms ordinary PC fans into natural wind simulators.
-The main goal is to create realistic, location-inspired wind patterns that mimic the feeling of natural outdoor breezes - from gentle Mediterranean coastal winds to dramatic Alpine gusts - bringing a more organic and soothing airflow experience to your indoor workspace.
+# WindScape
+
+*A Home Assistant / ESPHome project that turns everyday PWM‑controlled PC fans into remarkably natural indoor wind simulators.*
+
+WindScape delivers authentic, location‑inspired airflow—from a gentle Mediterranean whisper to a brisk Alpine surge—creating a natural, immersive atmosphere for your workspace, gaming setup, or sim‑racing cockpit. It’s a versatile wind simulator ready to elevate any project you dream up.
+
+## Table of Contents
+
+1. [Features](#features)
+1. [Operating Modes](#operating-modes)
+1. [Demo](#demo)
+1. [Preset Library](#preset-library)
+1. [Build Guides](#build-guides)
+1. [Software Setup](#software-setup)
+1. [Troubleshooting](#troubleshooting)
+1. [Tips for Best Experience](#tips-for-best-experience)
+1. [Technical Notes](#technical-notes)
+1. [Roadmap](#roadmap)
+1. [How WindScape Works](#how-windscape-works)
+1. [Links](#links)
+
+---
 
 ## Features
 
-* **Dynamic Wind Simulation Engine**
-  Realistic, randomized airflow patterns with smooth transitions between natural weather phases (quiet, moderate, and high activity).
+* **Dynamic Wind‑Simulation Engine**
+  Smooth, randomized airflow with realistic transitions between quiet, moderate, and high‑activity “weather” phases.
 
-* **6 Real-World Inspired Location Presets**
-  Includes presets based on the feel of different outdoor environments.
+* **Six Location Presets**
+  Pre‑tuned profiles that capture the feel of coastal, mountain, rural, and other outdoor environments.
 
-* **Manual Speed Control**
-  Manual or automated fan speed control for precise airflow settings.
+* **Manual or Automated Speed Control**
+  Adjust fan speed directly or let automations handle it.
 
-* **External Wind Sensor Support**
-  Automatically reacts to external sensor input (e.g., racing simulator car speed via MQTT), with fallback to last preset if the sensor becomes inactive.
+* **External Wind‑Sensor Support**
+  Reacts to live telemetry (e.g. racing‑sim car speed over MQTT) and safely reverts to the last preset if the sensor falls silent.
 
-* **Automation-Ready**
-  Easily combine Home Assistant sensors and triggers to dynamically change presets, wind behavior, and speed.
+* **Home Assistant Integration**
+  Control, monitor, and automate entirely over Wi‑Fi.
 
-* **Real-Time RPM Monitoring**
-  Monitor actual fan RPM using an external sensor for feedback and diagnostics.
+* **Real‑Time RPM Monitoring**
+  Optional tachometer feedback for diagnostics.
 
-* **Seamless Wireless Control**
-  Full integration with Home Assistant over Wi-Fi for remote control and automation.
+* **OTA Firmware Updates**
+  Built on ESPHome for one‑click wireless upgrades.
 
-* **Over-the-Air (OTA) Firmware Updates**
-  Powered by ESPHome for easy wireless updates and maintenance.
+---
 
+## Operating Modes
 
-## WindScape Modes Overview
+| Mode                              | Description                                                                                           |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Oscillating (Wind Simulation)** | Natural, ever‑changing airflow pattern.                                                               |
+| **Steady (Constant Breeze)**      | Fixed speed, no variability.                                                                          |
+| **External Sensor**               | Maps a Home Assistant sensor (e.g. car speed) to live fan speed; auto‑fallback after 60 s of silence. |
 
-### 1. Oscillating Mode (Wind Simulation)
-When oscillation is enabled, WindScape activates its wind simulation mode. The fan mimics dynamic airflow patterns.
+> **Global Power Control** in Home Assistant overrides every mode.
 
-### 2. Steady Mode (Constant Breeze)
-If oscillation is turned off, WindScape defaults to a steady breeze mode, delivering a constant, non-varying airflow.
+---
 
-### 3. External Sensor Mode (Dynamic Airflow via Sensor Data)
-You can configure WindScape in the substitutions to use a Home Assistant sensor that reports wind speed in km/h. When this sensor is actively publishing data, the fan automatically switches to **external mode**, allowing WindScape to respond to real-time wind data—ideal for simulating motion in racing simulators like **iRacing** via [ir2mqtt](https://github.com/jmlt/ir2mqtt), or for other sensor-based use cases.
+## Demo
 
-If the external sensor stops sending updates for over a minute, WindScape will automatically revert to the **last selected preset**.
+![WindScape configuration](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_01.gif?raw=true)
+![WindScape dashboard](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_02.gif?raw=true)
+![External sensor example](https://github.com/TilmanGriesel/WindScape/blob/main/docs/ha_iracing_01.png?raw=true)
 
-##### Additional Notes
+---
 
-* The **fan power control** functions as a global override.
-* Presets are managed through Home Assistant’s fan preset system.
-* Fine-tuning options like gust frequency, maximum fan speed, and more can be configured in the device settings.
+## Preset Library
 
+| # | Preset                            | Base Wind Range | Gust Style               | Character                      |
+| - | --------------------------------- | --------------- | ------------------------ | ------------------------------ |
+| 1 | **Ocean (Atlantic Coast)**        | 8–16 mph        | Rolling, 3 % @ 2 × speed | Energising, constant swell     |
+| 2 | **Mediterranean (Italian Coast)** | 4–10 mph        | Gentle, 1.5 % @ 1.6 ×    | Relaxed, great for reading     |
+| 3 | **Countryside (French Fields)**   | 2–8 mph         | Rare, 0.8 % @ 1.4 ×      | Whisper‑quiet, ideal for sleep |
+| 4 | **Mountains (Alpine Range)**      | 6–18 mph        | Sharp, 5 % @ 2.3 ×       | Crisp, invigorating shifts     |
+| 5 | **Plains (Patagonian Steppes)**   | 10–22 mph       | Sustained, 8 % @ 2.5 ×   | Strongest airflow, hot days    |
+| 6 | **Fjord (Norwegian Fjords)**      | 8–20 mph        | Channeled, 6 % @ 2.4 ×   | Dramatic, funnel‑like gusts    |
+| 7 | **Manual**                        | —               | —                        | Direct user control            |
 
-![config](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_01.gif?raw=true)
+---
 
-![dash](https://github.com/TilmanGriesel/WindScape/blob/main/docs/windscape_demo_02.gif?raw=true)
+## Build Guides
 
-![external_sensor](https://github.com/TilmanGriesel/WindScape/blob/main/docs/ha_iracing_01.png?raw=true)
+### 5 V Fan (USB‑Powered)
 
-## Presets
-
-Transform the atmosphere of your room with realistic wind profiles inspired by beautiful locations around the world. Each preset configures different wind speed ranges, gust characteristics, and weather phase behaviors to create unique atmospheric experiences.
-
-#### 1. Ocean (Atlantic Coast)
-- **Wind Range:** 8-16 mph (moderate to fresh breeze)
-- **Gust Behavior:** Frequent rolling gusts (3% probability, 2.0x intensity, 4s duration)
-- **Weather Phases:** Balanced transitions with sustained medium and high activity periods
-- **Experience:** Like standing on a breezy beach with consistent ocean winds and rolling wave-like gusts. Great for energizing, consistent airflow.
-
-#### 2. Mediterranean (Italian Coast)
-- **Wind Range:** 4-10 mph (light to gentle breeze)
-- **Gust Behavior:** Gentle, infrequent gusts (1.5% probability, 1.6x intensity, 2.5s duration)
-- **Weather Phases:** Longer quiet periods, shorter high activity phases
-- **Experience:** Soft coastal breeze perfect for relaxation, reading, or background airflow. Gentle enough for sleep yet alive enough to feel natural.
-
-#### 3. Countryside (French Fields)
-- **Wind Range:** 2-8 mph (calm to light breeze)
-- **Gust Behavior:** Rare, subtle gusts (0.8% probability, 1.4x intensity, 5s duration)
-- **Weather Phases:** Extended quiet periods, very gentle high activity
-- **Experience:** Whisper-quiet rural air with minimal variation. Perfect for sleeping, meditation, or when you want barely-noticeable natural airflow.
-
-#### 4. Mountains (Alpine Range)
-- **Wind Range:** 6-18 mph (moderate to strong breeze)
-- **Gust Behavior:** Sharp, frequent gusts (5% probability, 2.3x intensity, 2s duration)
-- **Weather Phases:** Quick transitions, shorter phases, dramatic weather changes
-- **Experience:** Crisp mountain air with sudden wind shifts and sharp gusts. Ideal for creating an invigorating alpine atmosphere indoors.
-
-#### 5. Plains (Patagonian Steppes)
-- **Wind Range:** 10-22 mph (fresh to strong breeze)
-- **Gust Behavior:** Powerful, sustained gusts (8% probability, 2.5x intensity, 6s duration)
-- **Weather Phases:** High activity periods are intense and frequent
-- **Experience:** The windiest preset - constant strong airflow with powerful gusts. Maximum performance for hot days or when you want dramatic atmospheric effects.
-
-#### 6. Fjord (Norwegian Fjords)
-- **Wind Range:** 8-20 mph (moderate to strong breeze)
-- **Gust Behavior:** Channeled, dramatic gusts (6% probability, 2.4x intensity, 3.5s duration)
-- **Weather Phases:** Unpredictable transitions mimicking fjord wind patterns
-- **Experience:** Dynamic airflow that feels like wind funneling between cliffs. Unique, immersive experience with surprising intensity changes.
-
-#### 7. Manual Mode
-
-- **Feel:** Whatever you choose
-- **Experience:** Full control. No simulation, just direct manual speed adjustment, great for testing, automations or when you want a consistent fan output without variation.
-
-
-## Build Instructions & Hardware Setup
-
-Which build you choose depends on which fan you're building this project with. Generally speaking, a 5V fan is a simpler build which can run off of any USB 3.0 or USB-C port on a computer, power bank, or low power wall connector.
-
-### 5V Case Fan (simpler)
 <details>
-
-<summary>Expand to see Bill of Materials (5V)</summary>
-
-#### Hardware
-- Any ESP32 development board with onboard wifi. Easily bought for around €3.00
-- Any 5V PC case fan that supports PWM (pulse width modulation)
-
-#### FAN
-- There's no set fan you should use, so long as the fan supports PWM speed control.
-  - An ideal option would be a a [Noctua NF-A12x25 5V](https://noctua.at/en/products/fan/nf-a12x25-5v), which is extremeley quiet, and can operate on as little as 5% duty cycle
-  - When comparing each fan's noise floor, remember that [db is logarithmic!](https://en.wikipedia.org/wiki/Decibel)
-
-##### DIY NV-FS1 Desk and Room Fan
-You can safe a bit of money and just print and build your own NV-FS1 with the NA-AA1-12 airflow amplifier. Here are some links:
-- https://www.printables.com/model/554226-120mm-computer-fan-desk-mount
-- https://www.printables.com/model/1324299-pc-desk-fan
-- https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
-- https://noctua.at/en/nf-a12x25-pwm
-- https://noctua.at/en/nv-aa1-12
-
-#### BOM
-Two simplified BOM options with one KIT version and a DIY build variant:
+<summary>Bill of Materials & Wiring</summary>
 
 | Item                            | 5V DIY Build (€)   |
 | ------------------------------- | ------------------ |
 | Noctua NF-A12x25 5V             | 33.00              |
 | Generic ESP32                   | 3.00               |
 | General hardware (screws, nuts) | 4.00               |
-| **Total Estimated Cost**        | €40.00             |
+| 3‑D printed mount & hardware    | 5.00               |
+| **Total Estimated Cost**        | **45.00**          |
 
-#### Wiring Diagram
+<details>
+<summary>Wiring Diagram</summary>
 
 ```
 +----------------------------+
@@ -176,47 +136,32 @@ Two simplified BOM options with one KIT version and a DIY build variant:
 |           | Pin 4 (Blue):   PWM ◄─── GPIO14
 |           +----------------------+
 ```
-           
+
 </details>
 
-### 12V Case Fan
+</details>
+
+---
+
+### 12 V Fan
+
 <details>
+<summary>Bill of Materials & Wiring</summary>
 
-<summary>Expand to see Bill of Materials (12V)</summary>
+| Item                         | Kit Route (€) | DIY Route (€) |
+| ---------------------------- | ------------- | ------------- |
+| NV‑FS1 fan kit (inc. PSU)    | **99.90**     | —             |
+| ESP32 (Lolin32 Lite)         | 8.21          | 8.21          |
+| Buck converter 12 → 5 V      | 4.00          | 4.00          |
+| 4‑pin fan cable              | 2.95          | 2.95          |
+| Noctua NF‑A12x25 PWM         | —             | 35.50         |
+| NV‑AA1‑12 amplifier          | —             | 14.90         |
+| 3‑D printed mount & hardware | —             | 5.00          |
+| 12 V PSU                     | Included      | 7.00          |
+| **Total**                    | **116.06**    | **78.56**     |
 
-#### Hardware
-- ESP32 development board (Lolin32 Lite recommended) around 6 Euros
-- 12V power supply
-- Optional: buck converter for 5V ESP32 power, the ESP32 can be powered by USB too.
-
-#### FAN
-- 4-pin PWM desk and room fan (like the Noctua NV-FS1) https://noctua.at/en/nv-fs1
-
-##### DIY NV-FS1 Desk and Room Fan
-You can safe a bit of money and just print and build your own NV-FS1 with the NA-AA1-12 airflow amplifier. Here are some links:
-- https://www.printables.com/model/1324299-pc-desk-fan
-- https://www.printables.com/model/889331-noctua-inspired-desk-fan-mount
-- https://noctua.at/en/nf-a12x25-pwm
-- https://noctua.at/en/nv-aa1-12
-
-#### BOM
-Two simplified BOM options with one KIT version and a DIY build variant:
-
-| Item                            | Setup A: NV‑FS1 Kit Route (€)                      | Setup B: DIY Build (€)    |
-| ------------------------------- | -------------------------------------------------- | ------------------------- |
-| NV‑FS1 Desk/Room Fan Kit        | **99.90** (MSRP)                                   | –                         |
-| ESP32 (Lolin32 Lite)            | 8.21                                               | 8.21                      |
-| Buck Converter (12 → 5 V)       | 4.00 (Mini‑Buck) approximate                       | 4.00                      |
-| 4‑pin PWM fan cable (extension) | 2.95 (estimated)                                   | 2.95                      |
-| Pull‑up & filter components     | 1.00 (estimated)                                   | 1.00                      |
-| **Noctua NF‑A12x25 PWM fan**    | Included in kit                                    | 35.50 (average EU price)  |
-| **NV‑AA1‑12 airflow amplifier** | Included in kit                                    | 14.90                     |
-| 3D‑printed mount & hardware     | –                                                  | 5.00                      |
-| 12 V Power Supply               | Included in kit                                    | 7.00                      |
-| **Total Estimated Cost**        | **€116.06**                                        | **€78.56**                |
-| **Savings with DIY Build**      | **–**                                              | **€37.50 less**           |
-
-#### Wiring Diagram
+<details>
+<summary>Wiring Diagram</summary>
 
 ##### USB Powered
 
@@ -312,167 +257,80 @@ Two simplified BOM options with one KIT version and a DIY build variant:
            +------------------------+
 ```
 
-**References:**
-- WEMOS LOLIN32 Lite Pinout: https://www.espboards.dev/esp32/lolin32/
-- Wiring example: https://raw.githubusercontent.com/wiki/KlausMu/esp32-fan-controller/images/fritzingESP32_BME280_fan.png
-
-
-![setup](https://raw.githubusercontent.com/TilmanGriesel/WindScape/843b6eca3a42019fdb35a68ddca5e0dcae5bd2b5/docs/title.png?raw=true)
-
-![breadboard](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img1.png?raw=true)
-
-![assembled](https://github.com/TilmanGriesel/ha_esphome_desk_fan/blob/main/docs/img2.png?raw=true)
-
 </details>
-
-### Software
-1. Flash the ESPHome config to your ESP32
-2. Add WiFi credentials to `secrets.yaml`
-3. Device appears automatically in Home Assistant
-
-## Configuration
-
-**Sliders:**
-- **Wind Intensity** (30–150%) - Global power multiplier for all wind effects
-- **Gust Frequency** (10–90%) - How often natural gusts occur
-- **Wind Variability** (5–40%) - How much wind speed varies over time (replaces oscillation)
-- **Minimum Fan Speed** (0–50%) - Safety limit to prevent fan stalling
-- **Maximum Fan Speed** (40–100%) - Upper safety limit for fan operation
-
-**Select:**
-- **Wind Mode** - Choose from 6 location presets or Manual mode
-
-**System Controls:**
-- **Restart** - Reboots the ESP32 device
-
-## Troubleshooting
-
-**Fan not responding?**
-- Verify PWM signal is correctly connected to the appropriate GPIO pin and supports 25 kHz operation; adjust configuration if necessary.
-- Ensure the fan controller is receiving a stable 12 V power supply.
-- Confirm the minimum fan speed setting is not set too low.
-- Check the fan’s minimum duty cycle—some models require at least 20%, or even up to 70%, to start operating.
-- Some fans may require an initial higher speed (“kick-start”) before they can be controlled at lower speeds.
-
-**No RPM reading?**
-- Verify tachometer wiring GPIO pin and internal pullup
-- Confirm fan provides tach signal output (Yellow wire)
-- Adjust pulse counter multiplier for your specific fan
-
-**Wind simulation not working?**
-- Ensure you're not in Manual mode
-- Check Wind Intensity isn't set too low (minimum 30%)
-- Verify Wind Variability setting provides enough movement
-
-**Wind feels too static?**
-- Increase Wind Variability setting (15-25% recommended)
-- Check that weather phases are transitioning (watch "Current Weather Phase" sensor)
-- Monitor "Current Wind State" to understand system behavior
-
-**Too much variation?**
-- Reduce Wind Variability setting
-- Lower Gust Frequency setting
-- Choose a calmer location preset (Countryside, Mediterranean)
-
-## Tips for Best Experience
-
-- **Start with defaults** - All presets are pre-tuned for natural feel
-- **Adjust gradually** - Small changes in variability and intensity have big effects
-- **Location matters** - Choose presets that match your desired atmosphere
-- **Monitor phases** - Watch the weather phase sensor to understand long-term patterns, test every pattern for 10 minutes to get a feel.
-- **Phase awareness** - WindScape naturally creates quiet periods, normal conditions, and stormy phases
-- **Power scaling** - Use Wind Intensity as a master volume control for all effects
-
-## Technical Notes
-
-- **Randomized timing** - All update intervals include random variation for natural unpredictability
-- **Phase-based ranges** - Each weather phase operates within different wind speed ranges
-- **Anti-cyclical design** - Eliminates predictable sine wave patterns in favor of target-based randomness
-- **Multi-layered variation** - Combines phase changes, target movement, micro-turbulence, and gusts
-- **Natural distribution** - Favors moderate conditions but allows for dramatic weather events
-- **Maintenance systems** - Automatic nudging prevents the system from getting stuck in static states
-- **Real-time adaptation** - Phase transitions happen organically based on elapsed time and probabilities
-
-## Roadmap
-- Explore connection to https://github.com/remvze/moodist
+</details>
 
 ---
 
-# How WindScape Works
+## Software Setup
 
-## Core Wind Engine
+1. Flash the WindScape ESPHome YAML to your ESP32.
+2. Add Wi‑Fi credentials in `secrets.yaml`.
+3. Reboot—the device will auto‑discover in Home Assistant.
 
-### Dynamic Target System
-- **Smooth Movement Patterns:** Wind flows naturally toward randomized targets within location-appropriate ranges
-- **Dynamic Phase Behavior:** Each weather phase features unique wind characteristics and speed ranges
-- **Natural Micro-Turbulence:** Continuous subtle variations create realistic air texture and prevent artificial stillness
-- **Continuous Motion Guarantee:** Multiple overlapping systems ensure the air never feels static or mechanical
+---
 
-### Three-Phase Weather System
-WindScape cycles through three distinct atmospheric phases that mirror real-world weather patterns:
+## Configuration Reference
 
-#### 1. Quiet Air Phase (90-210 seconds)
-- **Wind Intensity:** 30-40% of location's base range
-- **Turbulence:** Minimal (20% intensity)
-- **Gusts:** 40% less frequent with gentle intensity (1.1-1.5x strength, 2-6 second duration)
-- **Character:** Gradual, peaceful changes creating barely perceptible airflow
-- **Feel:** Like a tranquil summer evening or the stillness of early dawn
+| Control              | Range / Options    | Purpose                   |
+| -------------------- | ------------------ | ------------------------- |
+| **Wind Intensity**   | 30 – 150 %         | Master power scaler       |
+| **Gust Frequency**   | 10 – 90 %          | Probability of gust start |
+| **Wind Variability** | 5 – 40 %           | Overall speed fluctuation |
+| **Min Fan Speed**    | 0 – 50 %           | Prevent stall             |
+| **Max Fan Speed**    | 40 – 100 %         | Safety ceiling            |
+| **Wind Mode**        | 6 presets + Manual | Select ambience           |
+| **Restart**          | —                  | Reboot ESP32              |
 
-#### 2. Medium Conditions Phase (120-300 seconds)
-- **Wind Intensity:** 70-80% of location's base range
-- **Turbulence:** Standard (60% intensity)
-- **Gusts:** Normal frequency and strength (1.2-1.8x intensity, 1.5-6.5 second duration)
-- **Character:** Moderate variation with steady, predictable activity
-- **Feel:** A comfortable outdoor breeze with natural, rhythmic movement
+---
 
-#### 3. High Activity Phase (60-150 seconds)
-- **Wind Intensity:** 40-120% of location's base range (can exceed normal limits!)
-- **Turbulence:** Intense (120% intensity)
-- **Gusts:** 2.5x more frequent with powerful bursts (1.4-2.4x intensity, 1-4 second duration)
-- **Character:** Rapid, dramatic shifts with frequent strong gusts
-- **Feel:** Storm-like conditions delivering energizing, dynamic airflow
+## Troubleshooting
 
-## Natural Phase Transitions
+| Symptom                  | Checks                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------- |
+| **Fan not spinning**     | Verify PWM pin & 25 kHz capability · Confirm 5 V/12 V supply · Raise *Min Fan Speed* above stall duty |
+| **No RPM feedback**      | Check tach wiring/pull‑up · Confirm fan outputs tach · Adjust pulse multiplier                        |
+| **No wind simulation**   | Ensure **Manual Mode** is *off* · *Wind Intensity* ≥ 30 % · *Wind Variability* not 0 %                |
+| **Airflow feels static** | Increase *Wind Variability*                                        |
+| **Too chaotic**          | Lower *Gust Frequency* or choose a calmer preset                                                      |
 
-The system transitions between phases using realistic weather probabilities:
-- **From Quiet Air:** 60% chance to Medium Conditions, 40% chance to High Activity (sudden storms happen!)
-- **From Medium Conditions:** 30% to Quiet Air, 40% stay Medium, 30% to High Activity
-- **From High Activity:** 40% to Medium, 30% to Quiet Air (sudden calm), 30% stay High
+---
 
-## Location-Specific Customization
+## Tips for Best Experience
 
-Each environment preset fine-tunes atmospheric parameters across all phases:
-- **Base wind ranges** with **phase-specific adjustments**
-- **Gust frequency** and **intensity profiles**
-- **Turbulence characteristics** and **transition speeds**
-- **Phase duration preferences** and **weather progression patterns**
+* **Begin with Defaults** – Presets are tuned for realism out‑of‑the‑box.
+* **Tweak Slowly** – Small slider changes have large perceptual impact.
+* **Pick the Right Preset** – Match airflow to activity: calming *Countryside* for sleep, energising *Plains* for heat.
 
-## Advanced Gust System
+---
 
-### Realistic Wind Burst Patterns
-- **Phase-Matched Timing:** Quiet phases deliver infrequent, gentle gusts; High Activity phases produce frequent, intense bursts
-- **Natural Duration Range:** 1.5-8 seconds with realistic distribution (shorter gusts more common)
-- **Variable Intensity:** Each gust features randomized strength within phase-appropriate limits
-- **Organic Shape:** Three-stage progression (gradual buildup → sustained peak with variation → smooth decay)
+## Technical Notes
 
-## Wind Speed Calculation Process
+WindScape layers multiple randomised systems (phase engine, micro‑turbulence, gusts) to avoid predictable sine‑wave patterns and ensure continuous, organic motion. All timings are jittered; phase progression is probability‑based; and user intensity scaling is applied last.
 
-1. **Target Generation:** Creates random wind targets within the current phase's intensity range
-2. **Smooth Transitions:** Current wind speed flows toward targets at phase-appropriate rates
-3. **Micro-Turbulence:** Applies phase-specific random fluctuations continuously
-4. **Gust Integration:** Adds active gust multipliers when wind bursts are in progress
-5. **Global Scaling:** Applies user wind intensity setting (30-150%)
-6. **Safety Enforcement:** Ensures output stays within minimum/maximum fan speed limits
-7. **PWM Conversion:** Translates final percentage to precise PWM control signals
+---
 
-## Real-Time Wind Monitoring
+## Roadmap
 
-### Wind Conditions Display
-- **Current Wind Speed** (MPH) - Live simulated velocity including active gusts
-- **Gust Status** (%) - Real-time gust intensity (shows 0% when no gust is active)
-- **Active Weather Phase** - Displays "Quiet Air," "Medium Conditions," or "High Activity"
-- **Wind Description** - Human-friendly summary with current phase information
-- **System Status** - Shows current behavior ("Wind building," "Gust active," "Phase: 2m remaining")
+* Native integration with [moodist](https://github.com/remvze/moodist) ambience engine.
 
-### System Health Diagnostics
-- **Standard ESP32 Metrics** - System uptime, WiFi signal strength, processor temperature, memory usage
+---
+
+## How WindScape Works
+
+WindScape cycles through **Quiet**, **Medium**, and **High‑Activity** weather phases, each with its own speed ranges and gust probabilities. A dynamic target algorithm steers the fan toward randomly selected speeds within those ranges, while micro‑turbulence and gust overlays add texture. External sensor mode bypasses the simulation and maps real‑time data directly to fan speed, with automatic safety fallback.
+
+---
+
+## Links
+
+* **Home Assistant** – [https://www.home-assistant.io/](https://www.home-assistant.io/)
+* **ESPHome** – [https://esphome.io/](https://esphome.io/)
+* **Noctua Fans & Accessories** – [https://noctua.at/](https://noctua.at/)
+* **DIY Fan Mount STL files** – [https://www.printables.com/](https://www.printables.com/)
+* **ir2mqtt** (iRacing telemetry → MQTT) – [https://github.com/jmlt/ir2mqtt](https://github.com/jmlt/ir2mqtt)
+* **Moodist** (ambient engine) – [https://github.com/remvze/moodist](https://github.com/remvze/moodist)
+
+---
+
+*© 2025  WindScape. Licensed under the MIT License unless noted otherwise.*
