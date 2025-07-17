@@ -86,7 +86,6 @@ fan:
       - "Ocean (High)"          # Steady High when oscillating=OFF, Ocean when oscillating=ON
       - "Mountain (Breeze)"     # Steady Breeze when oscillating=OFF, Mountain when oscillating=ON
       - "Plains (Max)"          # Steady Max when oscillating=OFF, Plains when oscillating=ON
-      - "Fjord"                 # Special wind mode (only available when oscillating=ON)
       - "External"              # External sensor mode
     on_turn_on:
       - logger.log: "Fan Control turned ON - enabling fan power"
@@ -100,6 +99,7 @@ fan:
           // Stop all simulations when fan is turned off
           id(wind_simulation_loop).stop();
           id(gust_check_loop).stop();
+          id(thermal_bubble_loop).stop();
           id(external_sensor_loop).stop();
           id(external_sensor_timeout_loop).stop();
           id(wind_simulation_active) = false;
@@ -114,6 +114,9 @@ fan:
       - logger.log:
           format: "Oscillating mode changed to: %s"
           args: ['x ? "Wind Simulation" : "Steady Mode"']
+      - lambda: |-
+          // Sync the dedicated Wind Simulation switch state
+          id(wind_simulation_switch).publish_state(x);
       - script.execute:
           id: handle_mode_change
           oscillating: !lambda "return x;"
@@ -198,6 +201,36 @@ sensor:
     state_class: "measurement"
     update_interval: ${sensor_update_interval}
 
+  # Current preset mode
+  - platform: template
+    name: "Current Preset Mode"
+    id: current_preset_sensor
+    icon: "mdi:cog"
+    state_class: "measurement"
+    update_interval: ${sensor_update_interval}
+    lambda: |-
+      return id(current_preset_mode);
+
+  # Thermal bubble status
+  - platform: template
+    name: "Thermal Bubble Active"
+    id: thermal_bubble_sensor
+    unit_of_measurement: "%"
+    icon: "mdi:fire"
+    accuracy_decimals: 0
+    state_class: "measurement"
+    update_interval: ${sensor_update_interval}
+
+  # Von Kármán turbulence energy
+  - platform: template
+    name: "Turbulence Energy"
+    id: turbulence_energy_sensor
+    unit_of_measurement: "J"
+    icon: "mdi:sine-wave"
+    accuracy_decimals: 2
+    state_class: "measurement"
+    update_interval: ${sensor_update_interval}
+
   # System diagnostics
   - platform: uptime
     name: "${friendly_name} Uptime"
@@ -268,6 +301,91 @@ number:
     mode: slider
     optimistic: true
 
+  # Von Kármán turbulence length scale
+  - platform: template
+    name: "Turbulence Length Scale"
+    id: turbulence_length_scale_control
+    min_value: 5
+    max_value: 100
+    step: 5
+    initial_value: 25
+    unit_of_measurement: "m"
+    restore_value: true
+    icon: "mdi:ruler"
+    mode: slider
+    optimistic: true
+    on_value:
+      - lambda: |-
+          id(turbulence_length_scale) = x;
+
+  # Von Kármán turbulence intensity
+  - platform: template
+    name: "Turbulence Intensity"
+    id: turbulence_intensity_control
+    min_value: 0.1
+    max_value: 1.0
+    step: 0.05
+    initial_value: 0.3
+    unit_of_measurement: "σ"
+    restore_value: true
+    icon: "mdi:weather-windy-variant"
+    mode: slider
+    optimistic: true
+    on_value:
+      - lambda: |-
+          id(turbulence_intensity_sigma) = x;
+
+  # Thermal bubble frequency
+  - platform: template
+    name: "Thermal Bubble Frequency"
+    id: thermal_bubble_frequency_control
+    min_value: 0.01
+    max_value: 0.2
+    step: 0.01
+    initial_value: 0.05
+    unit_of_measurement: "Hz"
+    restore_value: true
+    icon: "mdi:fire"
+    mode: slider
+    optimistic: true
+    on_value:
+      - lambda: |-
+          id(thermal_bubble_frequency) = x;
+
+  # Thermal bubble strength
+  - platform: template
+    name: "Thermal Bubble Strength"
+    id: thermal_bubble_strength_control
+    min_value: 1.0
+    max_value: 5.0
+    step: 0.1
+    initial_value: 2.5
+    unit_of_measurement: "×"
+    restore_value: true
+    icon: "mdi:thermometer-plus"
+    mode: slider
+    optimistic: true
+    on_value:
+      - lambda: |-
+          id(thermal_bubble_strength) = x;
+
+  # Thermal bubble radius
+  - platform: template
+    name: "Thermal Bubble Radius"
+    id: thermal_bubble_radius_control
+    min_value: 5
+    max_value: 50
+    step: 5
+    initial_value: 15
+    unit_of_measurement: "m"
+    restore_value: true
+    icon: "mdi:circle-outline"
+    mode: slider
+    optimistic: true
+    on_value:
+      - lambda: |-
+          id(thermal_bubble_radius) = x;
+
   # Minimum fan speed
   - platform: template
     name: "Minimum Fan Speed"
@@ -295,6 +413,29 @@ number:
     icon: "mdi:speedometer"
     mode: slider
     optimistic: true
+
+# Wind simulation control
+switch:
+  - platform: template
+    name: "Wind Simulation"
+    id: wind_simulation_switch
+    icon: "mdi:weather-windy"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    lambda: |-
+      return id(is_oscillating);
+    turn_on_action:
+      - logger.log: "Wind Simulation enabled via dedicated switch"
+      - lambda: |-
+          auto call = id(desk_fan).make_call();
+          call.set_oscillating(true);
+          call.perform();
+    turn_off_action:
+      - logger.log: "Wind Simulation disabled via dedicated switch"
+      - lambda: |-
+          auto call = id(desk_fan).make_call();
+          call.set_oscillating(false);
+          call.perform();
 
 # System status
 binary_sensor:
@@ -409,6 +550,73 @@ globals:
     type: float
     restore_value: false
     initial_value: '1.8'
+
+  # Von Kármán spectral turbulence parameters
+  - id: turbulence_length_scale
+    type: float
+    restore_value: false
+    initial_value: '25.0'  # Length scale L in meters
+    
+  - id: turbulence_intensity_sigma
+    type: float
+    restore_value: false
+    initial_value: '0.3'   # Intensity σ parameter
+    
+  - id: turbulence_time_scale
+    type: float
+    restore_value: false
+    initial_value: '5.0'   # Time scale for spectral evolution
+    
+  - id: spectral_energy_buffer
+    type: float
+    restore_value: false
+    initial_value: '0.0'   # Buffer for spectral energy accumulation
+    
+  - id: spectral_phase_accumulator
+    type: float
+    restore_value: false
+    initial_value: '0.0'   # Phase accumulator for spectral evolution
+
+  # Thermal bubble parameters
+  - id: thermal_bubble_active
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+    
+  - id: thermal_bubble_strength
+    type: float
+    restore_value: false
+    initial_value: '2.5'   # Thermal bubble intensity multiplier
+    
+  - id: thermal_bubble_radius
+    type: float
+    restore_value: false
+    initial_value: '15.0'  # Thermal bubble spatial radius in meters
+    
+  - id: thermal_bubble_start_time
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+    
+  - id: thermal_bubble_duration
+    type: float
+    restore_value: false
+    initial_value: '8.0'   # Thermal bubble duration in seconds
+    
+  - id: thermal_bubble_frequency
+    type: float
+    restore_value: false
+    initial_value: '0.05'  # Probability of thermal bubble occurrence
+    
+  - id: last_thermal_check
+    type: float
+    restore_value: false
+    initial_value: '0.0'
+    
+  - id: current_thermal_contribution
+    type: float
+    restore_value: false
+    initial_value: '0.0'
     
   # Weather phase system
   - id: current_weather_phase
@@ -486,12 +694,15 @@ script:
           // Stop current activities
           id(wind_simulation_loop).stop();
           id(gust_check_loop).stop();
+          id(thermal_bubble_loop).stop();
           id(wind_simulation_active) = false;
           
-          // Reset gust state
+          // Reset gust and thermal state
           id(gust_active) = false;
           id(gust_intensity) = 1.0f;
           id(gust_active_sensor).publish_state(0);
+          id(thermal_bubble_active) = false;
+          id(thermal_bubble_sensor).publish_state(0);
           
       - delay: 300ms
       - script.execute:
@@ -513,14 +724,17 @@ script:
           // Stop all current activities
           id(wind_simulation_loop).stop();
           id(gust_check_loop).stop();
+          id(thermal_bubble_loop).stop();
           id(external_sensor_loop).stop();
           id(external_sensor_timeout_loop).stop();
           id(wind_simulation_active) = false;
           
-          // Reset gust state
+          // Reset gust and thermal state
           id(gust_active) = false;
           id(gust_intensity) = 1.0f;
           id(gust_active_sensor).publish_state(0);
+          id(thermal_bubble_active) = false;
+          id(thermal_bubble_sensor).publish_state(0);
           
       - delay: 300ms
       - script.execute:
@@ -549,63 +763,62 @@ script:
           
           // Handle other presets based on oscillating state
           if (!is_wind_mode) {
-            // Steady mode - fixed speeds
+            // Steady mode - fixed speeds with corresponding wind speed values in m/s
+            float steady_wind_ms = 0.0f;
             if (preset == "Countryside (Low)") {
               id(apply_fan_speed).execute(25.0f);
+              steady_wind_ms = 2.0f;  // Mid-range of 0.7-3.4
             } else if (preset == "Mediterranean (Medium)") {
               id(apply_fan_speed).execute(50.0f);
+              steady_wind_ms = 2.9f;  // Mid-range of 1.6-4.2
             } else if (preset == "Ocean (High)") {
               id(apply_fan_speed).execute(75.0f);
+              steady_wind_ms = 4.9f;  // Mid-range of 3.1-6.8
             } else if (preset == "Mountain (Breeze)") {
               id(apply_fan_speed).execute(35.0f);
+              steady_wind_ms = 4.8f;  // Mid-range of 2.2-7.5
             } else if (preset == "Plains (Max)") {
-              id(apply_fan_speed).execute(100.0f);
-            } else if (preset == "Fjord") {
-              // Fjord only available in wind mode, default to medium in steady
-              id(apply_fan_speed).execute(50.0f);
+              id(apply_fan_speed).execute(85.0f);  // Reduced from 100%
+              steady_wind_ms = 6.4f;  // Mid-range of 4.0-8.8
             }
+            
+            // Publish steady wind speed value in m/s
+            id(wind_speed_sensor).publish_state(steady_wind_ms);
           } else {
             // Wind simulation mode - different environments
             if (preset == "Countryside (Low)") {
-              // Countryside (French Fields): 2-8 mph, rare subtle gusts
-              id(base_wind_min) = 2.0f;
-              id(base_wind_max) = 8.0f;
-              id(gust_probability_base) = 0.008f;
-              id(location_gust_strength) = 1.4f;
+              // Countryside: Gentle, steady breezes with occasional soft gusts (1.5-7.5 mph -> 0.7-3.4 m/s)
+              id(base_wind_min) = 0.7f;
+              id(base_wind_max) = 3.4f;
+              id(gust_probability_base) = 0.006f;
+              id(location_gust_strength) = 1.35f;
               id(start_wind_simulation).execute();
             } else if (preset == "Mediterranean (Medium)") {
-              // Mediterranean (Italian Coast): 4-10 mph, gentle infrequent gusts
-              id(base_wind_min) = 4.0f;
-              id(base_wind_max) = 10.0f;
-              id(gust_probability_base) = 0.015f;
-              id(location_gust_strength) = 1.6f;
+              // Mediterranean: Warm coastal winds with thermal-driven gusts (reduced max to prevent clamp)
+              id(base_wind_min) = 1.6f;
+              id(base_wind_max) = 4.2f;  // Reduced from 4.9
+              id(gust_probability_base) = 0.012f;
+              id(location_gust_strength) = 1.55f;
               id(start_wind_simulation).execute();
             } else if (preset == "Ocean (High)") {
-              // Ocean (Atlantic Coast): 8-16 mph, frequent rolling gusts
-              id(base_wind_min) = 8.0f;
-              id(base_wind_max) = 16.0f;
-              id(gust_probability_base) = 0.03f;
-              id(location_gust_strength) = 2.0f;
+              // Ocean: Steady maritime winds with rolling pressure-driven gusts (reduced max)
+              id(base_wind_min) = 3.1f;
+              id(base_wind_max) = 6.8f;  // Reduced from 7.6
+              id(gust_probability_base) = 0.025f;
+              id(location_gust_strength) = 1.9f;
               id(start_wind_simulation).execute();
             } else if (preset == "Mountain (Breeze)") {
-              // Mountains (Alpine Range): 6-18 mph, sharp frequent gusts
-              id(base_wind_min) = 6.0f;
-              id(base_wind_max) = 18.0f;
-              id(gust_probability_base) = 0.05f;
-              id(location_gust_strength) = 2.3f;
+              // Mountain: Variable terrain winds with sharp elevation-driven gusts (reduced max)
+              id(base_wind_min) = 2.2f;
+              id(base_wind_max) = 7.5f;  // Reduced from 8.5
+              id(gust_probability_base) = 0.045f;
+              id(location_gust_strength) = 2.2f;
               id(start_wind_simulation).execute();
             } else if (preset == "Plains (Max)") {
-              // Plains (Patagonian Steppes): 10-22 mph, powerful sustained gusts
-              id(base_wind_min) = 10.0f;
-              id(base_wind_max) = 22.0f;
-              id(gust_probability_base) = 0.08f;
-              id(location_gust_strength) = 2.5f;
-              id(start_wind_simulation).execute();
-            } else if (preset == "Fjord") {
-              // Fjord (Norwegian Fjords): 8-20 mph, channeled dramatic gusts
-              id(base_wind_min) = 8.0f;
-              id(base_wind_max) = 20.0f;
-              id(gust_probability_base) = 0.06f;
+              // Plains: Consistent strong winds with powerful pressure-system gusts (reduced max)
+              id(base_wind_min) = 4.0f;
+              id(base_wind_max) = 8.8f;  // Reduced from 10.3
+              id(gust_probability_base) = 0.070f;
               id(location_gust_strength) = 2.4f;
               id(start_wind_simulation).execute();
             }
@@ -620,22 +833,29 @@ script:
           id(current_wind_speed) = mid_range;
           id(target_wind_speed) = mid_range;
           
+          // Reset momentum variables to avoid stale values
+          // Note: These are static in the calculation function, so we can't directly reset them here
+          
+          ESP_LOGI("wind", "Initializing wind simulation: mid_range=%.1f m/s", mid_range);
+          
           // Initialize phase system
           id(current_weather_phase) = 1; // Start with medium phase
           id(phase_start_time) = millis() / 1000.0f;
           id(phase_duration) = 120.0f; // 2 minutes initial phase
           
-          // Set initial phase ranges (medium)
-          id(phase_wind_min) = id(base_wind_min) * 0.7f;
-          id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.8f;
+          // Set initial phase ranges (medium) with tighter bounds
+          float range_span = id(base_wind_max) - id(base_wind_min);
+          id(phase_wind_min) = id(base_wind_min) + (range_span * 0.15f);
+          id(phase_wind_max) = id(base_wind_min) + (range_span * 0.85f);
           
           // Start simulation
           id(wind_simulation_active) = true;
           id(generate_wind_target).execute();
           id(wind_simulation_loop).execute();
           id(gust_check_loop).execute();
+          id(thermal_bubble_loop).execute();
           
-          ESP_LOGI("wind", "Started wind simulation: base range %.1f-%.1f mph, starting medium phase", 
+          ESP_LOGI("wind", "Started wind simulation: base range %.1f-%.1f m/s, starting medium phase", 
                    id(base_wind_min), id(base_wind_max));
 
   # Check external sensor timeout
@@ -687,8 +907,193 @@ script:
           
           ESP_LOGD("wind", "External Sensor: %.1f km/h -> %.1f%% fan", kmh, fan_percent);
           id(apply_fan_speed).execute(fan_percent);
+          
+          // Publish corresponding wind speed in m/s (convert from km/h)
+          float wind_speed_ms = kmh * 0.27778f; // 1 km/h = 0.27778 m/s
+          id(wind_speed_sensor).publish_state(wind_speed_ms);
 
-  # Generate new random wind target
+  # Von Kármán spectral turbulence calculation
+  - id: calculate_von_karman_turbulence
+    then:
+      - lambda: |-
+          #define M_PI 3.14159265358979323846
+          if (!id(wind_simulation_active)) return;
+          
+          float current_time = millis() / 1000.0f;
+          float dt = 0.2f; // 200ms update interval
+          
+          // Von Kármán parameters
+          float L = id(turbulence_length_scale);  // Length scale
+          float sigma = id(turbulence_intensity_sigma);  // Intensity
+          float U = id(current_wind_speed);  // Mean wind speed
+          
+          // Avoid division by zero
+          if (U < 0.1f) U = 0.1f;
+          
+          // Von Kármán spectral density approximation
+          // Uses multiple frequency components to approximate the spectral shape
+          float turbulence_sum = 0.0f;
+          float energy_sum = 0.0f;
+          
+          // Sample multiple frequency components (simplified spectral approach)
+          for (int i = 1; i <= 8; i++) {
+            float n = i * 0.1f; // Normalized frequency
+            float f = n * U / L; // Actual frequency
+            
+            // Von Kármán spectral density: S(f) = 4σ²(L/U) * (1 + 70.8(fL/U)²) / (1 + 70.8(fL/U)²)^(5/6)
+            float fL_over_U = f * L / U;
+            float numerator = 4.0f * sigma * sigma * (L / U) * (1.0f + 70.8f * fL_over_U * fL_over_U);
+            float denominator = pow(1.0f + 70.8f * fL_over_U * fL_over_U, 5.0f/6.0f);
+            float spectral_density = numerator / denominator;
+            
+            // Phase evolution for each frequency component
+            float phase_rate = 2.0f * M_PI * f;
+            float phase_increment = phase_rate * dt;
+            
+            // Generate correlated random phase increments
+            float phase_noise = ((esp_random() % 2000) - 1000) / 1000.0f * 0.1f;
+            float current_phase = id(spectral_phase_accumulator) * i + phase_increment + phase_noise;
+            
+            // Calculate turbulence component
+            float amplitude = sqrt(2.0f * spectral_density * 0.1f); // Frequency bandwidth
+            float component = amplitude * sin(current_phase);
+            
+            turbulence_sum += component;
+            energy_sum += spectral_density;
+          }
+          
+          // Update phase accumulator
+          id(spectral_phase_accumulator) += dt * 0.5f;
+          if (id(spectral_phase_accumulator) > 2.0f * M_PI) {
+            id(spectral_phase_accumulator) -= 2.0f * M_PI;
+          }
+          
+          // Apply spatial correlation filter (simplified)
+          float correlation_factor = exp(-dt / id(turbulence_time_scale));
+          id(spectral_energy_buffer) = id(spectral_energy_buffer) * correlation_factor + 
+                                       turbulence_sum * (1.0f - correlation_factor);
+          
+          // Update sensor
+          id(turbulence_energy_sensor).publish_state(energy_sum);
+
+  # Thermal bubble calculation
+  - id: calculate_thermal_bubble
+    then:
+      - lambda: |-
+          #define M_PI 3.14159265358979323846
+          if (!id(wind_simulation_active)) return;
+          
+          float current_time = millis() / 1000.0f;
+          float thermal_contribution = 0.0f;
+          
+          // Check if thermal bubble is active
+          if (id(thermal_bubble_active)) {
+            float bubble_age = current_time - id(thermal_bubble_start_time);
+            
+            if (bubble_age >= id(thermal_bubble_duration)) {
+              // End thermal bubble
+              id(thermal_bubble_active) = false;
+              id(thermal_bubble_sensor).publish_state(0);
+              ESP_LOGI("wind", "Thermal bubble ended after %.1f seconds", bubble_age);
+              return;
+            }
+            
+            // Calculate thermal bubble envelope with realistic physics
+            float progress = bubble_age / id(thermal_bubble_duration);
+            float envelope;
+            
+            if (progress < 0.2f) {
+              // Gradual build-up (thermal convection takes time)
+              envelope = progress / 0.2f;
+              envelope = 1.0f - pow(1.0f - envelope, 2.0f);
+            } else if (progress < 0.6f) {
+              // Plateau with natural oscillations
+              envelope = 1.0f;
+              // Add thermal turbulence oscillations
+              float osc_freq = 0.8f + (id(current_weather_phase) * 0.2f);
+              float variation = sin(bubble_age * osc_freq * 2.0f * M_PI) * 0.15f + 
+                               cos(bubble_age * osc_freq * 1.7f * M_PI) * 0.1f;
+              envelope += variation;
+            } else {
+              // Decay phase (thermal dissipation)
+              float decay_progress = (progress - 0.6f) / 0.4f;
+              envelope = 1.0f - pow(decay_progress, 1.3f);
+            }
+            
+            // Calculate spatial effect (simplified - assumes obstacle at origin)
+            float spatial_factor = 1.0f; // Full effect (would vary with position in real implementation)
+            
+            // Thermal bubble creates vertical updrafts
+            float thermal_strength = id(thermal_bubble_strength) * envelope * spatial_factor;
+            thermal_contribution = thermal_strength - 1.0f; // Subtract base to get additional effect
+            
+            // Update sensor
+            id(thermal_bubble_sensor).publish_state(envelope * 100.0f);
+            
+            // Store thermal contribution in global variable
+            id(current_thermal_contribution) = thermal_contribution;
+          } else {
+            id(current_thermal_contribution) = 0.0f;
+          }
+
+  # Check for thermal bubble initiation
+  - id: check_thermal_bubbles
+    then:
+      - lambda: |-
+          if (!id(wind_simulation_active)) return;
+          
+          float current_time = millis() / 1000.0f;
+          
+          // Check if enough time has passed since last check
+          if (current_time - id(last_thermal_check) < 2.0f) return;
+          id(last_thermal_check) = current_time;
+          
+          // Don't start new bubble if one is active
+          if (id(thermal_bubble_active)) return;
+          
+          // Base probability scaled by user setting
+          float base_prob = id(thermal_bubble_frequency);
+          
+          // Wind speed affects thermal bubble probability (higher speeds = more mixing)
+          float wind_speed_factor = 1.0f + (id(current_wind_speed) / 8.0f) * 0.3f;
+          
+          // Phase affects thermal activity
+          float phase_multiplier;
+          if (id(current_weather_phase) == 0) {      // Quiet - more stable thermals
+            phase_multiplier = 1.2f;
+          } else if (id(current_weather_phase) == 2) { // High - unstable thermals
+            phase_multiplier = 0.7f;
+          } else {                                   // Medium - normal thermals
+            phase_multiplier = 1.0f;
+          }
+          
+          float final_prob = base_prob * wind_speed_factor * phase_multiplier;
+          
+          // Random chance for thermal bubble
+          float random_val = (esp_random() % 10000) / 10000.0f;
+          
+          if (random_val < final_prob) {
+            // Start new thermal bubble
+            id(thermal_bubble_active) = true;
+            id(thermal_bubble_start_time) = current_time;
+            
+            // Vary duration based on conditions
+            float duration_base = 8.0f + ((esp_random() % 100) / 100.0f) * 6.0f; // 8-14s
+            
+            // Adjust duration based on phase
+            if (id(current_weather_phase) == 0) {      // Quiet - longer thermals
+              duration_base *= 1.3f;
+            } else if (id(current_weather_phase) == 2) { // High - shorter thermals
+              duration_base *= 0.8f;
+            }
+            
+            id(thermal_bubble_duration) = duration_base;
+            
+            ESP_LOGI("wind", "Starting thermal bubble: duration=%.1fs, strength=%.1fx", 
+                     id(thermal_bubble_duration), id(thermal_bubble_strength));
+          }
+
+  # Generate new random wind target with Von Kármán influence
   - id: generate_wind_target
     then:
       - lambda: |-
@@ -705,7 +1110,7 @@ script:
           
           id(target_wind_speed) = new_target;
           
-          // Set change rate based on current phase
+          // Set change rate based on current phase with Von Kármán influence
           float variability = id(wind_variability).state / 100.0f;
           float base_rate;
           
@@ -717,10 +1122,17 @@ script:
             base_rate = 0.15f + (variability * 0.25f);
           }
           
+          // Adjust rate based on turbulence characteristics
+          float L = id(turbulence_length_scale);
+          float U = id(current_wind_speed);
+          if (U < 0.1f) U = 0.1f;
+          float time_scale_factor = L / U; // Larger scales = slower changes
+          base_rate *= (1.0f + time_scale_factor * 0.1f);
+          
           float rate_variation = (esp_random() % 100) / 100.0f;
           id(wind_change_rate) = base_rate * (0.7f + rate_variation);
           
-          ESP_LOGD("wind", "Phase %d target: %.1f mph, rate: %.3f", 
+          ESP_LOGD("wind", "Phase %d target: %.1f m/s, rate: %.3f", 
                    id(current_weather_phase), id(target_wind_speed), id(wind_change_rate));
 
   # Weather phase management
@@ -772,23 +1184,24 @@ script:
             
             id(phase_start_time) = current_time;
             
-            // Update phase-specific wind ranges
-            if (id(current_weather_phase) == 0) {        // Quiet phase
-              id(phase_wind_min) = id(base_wind_min) * 0.3f;
-              id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.4f;
-            } else if (id(current_weather_phase) == 1) { // Medium phase
-              id(phase_wind_min) = id(base_wind_min) * 0.7f;
-              id(phase_wind_max) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.8f;
-            } else {                                     // High phase
-              id(phase_wind_min) = id(base_wind_min) + (id(base_wind_max) - id(base_wind_min)) * 0.4f;
-              id(phase_wind_max) = id(base_wind_max) * 1.2f; // Can exceed base max during storms
+            // Update phase-specific wind ranges with tighter bounds
+            float range_span = id(base_wind_max) - id(base_wind_min);
+            if (id(current_weather_phase) == 0) {        // Quiet phase - lower 60% of range
+              id(phase_wind_min) = id(base_wind_min);
+              id(phase_wind_max) = id(base_wind_min) + (range_span * 0.6f);
+            } else if (id(current_weather_phase) == 1) { // Medium phase - middle 70% of range
+              id(phase_wind_min) = id(base_wind_min) + (range_span * 0.15f);
+              id(phase_wind_max) = id(base_wind_min) + (range_span * 0.85f);
+            } else {                                     // High phase - upper 60% of range
+              id(phase_wind_min) = id(base_wind_min) + (range_span * 0.4f);
+              id(phase_wind_max) = id(base_wind_max);
             }
             
-            // Clamp phase ranges to reasonable limits (0.5-25 mph)
-            id(phase_wind_min) = fmax(0.5f, id(phase_wind_min));
-            id(phase_wind_max) = fmin(25.0f, id(phase_wind_max));
+            // Clamp phase ranges to reasonable limits (0.2-10.5 m/s)
+            id(phase_wind_min) = fmax(0.2f, id(phase_wind_min));
+            id(phase_wind_max) = fmin(10.5f, id(phase_wind_max));
             
-            ESP_LOGI("wind", "Phase change %d->%d: range %.1f-%.1f mph, duration %.0fs", 
+            ESP_LOGI("wind", "Phase change %d->%d: range %.1f-%.1f m/s, duration %.0fs", 
                      old_phase, id(current_weather_phase), 
                      id(phase_wind_min), id(phase_wind_max), id(phase_duration));
             
@@ -796,7 +1209,7 @@ script:
             id(generate_wind_target).execute();
           }
 
-  # Main wind simulation with smooth transitions
+  # Enhanced wind simulation with Von Kármán turbulence and thermal bubbles
   - id: calculate_wind_simulation
     then:
       - lambda: |-
@@ -812,40 +1225,63 @@ script:
           float current = id(current_wind_speed);
           float change_rate = id(wind_change_rate);
           
-          // Simple linear interpolation toward target
+          // Natural exponential approach to target (more realistic)
           float difference = target - current;
           float change = difference * change_rate;
           
-          // Phase-specific micro-turbulence
-          float turb_intensity;
-          if (id(current_weather_phase) == 0) {        // Quiet - minimal turbulence
-            turb_intensity = 0.2f;
-          } else if (id(current_weather_phase) == 2) { // High - strong turbulence
-            turb_intensity = 1.2f;
-          } else {                                     // Medium - moderate turbulence
-            turb_intensity = 0.6f;
+          // Add natural momentum - wind changes resist sudden shifts
+          static float wind_momentum = 0.0f;
+          // Reset momentum if simulation just started (use phase start time)
+          if (current_time - id(phase_start_time) < 2.0f) {
+            wind_momentum = 0.0f;
+            ESP_LOGD("wind", "Reset wind momentum");
+          }
+          wind_momentum = wind_momentum * 0.85f + change * 0.15f;
+          // Clamp momentum to reasonable bounds
+          wind_momentum = fmax(-3.0f, fmin(3.0f, wind_momentum));
+          change = wind_momentum;
+          
+          // Calculate Von Kármán spectral turbulence (replaces simple micro-turbulence)
+          id(calculate_von_karman_turbulence).execute();
+          float von_karman_turb = id(spectral_energy_buffer);
+          
+          // Calculate thermal bubble contribution
+          id(calculate_thermal_bubble).execute();
+          float thermal_contribution = id(current_thermal_contribution);
+          
+          // Combine base wind change with Von Kármán turbulence
+          float new_speed = current + change + von_karman_turb;
+          
+          // Clamp to reasonable bounds (0-11 m/s range, equivalent to 0-25 mph)
+          new_speed = fmax(0.2f, fmin(11.0f, new_speed));
+          id(current_wind_speed) = new_speed;
+          
+          // Debug output every 20 iterations to avoid spam
+          static int debug_counter = 0;
+          if (++debug_counter % 20 == 0) {
+            ESP_LOGI("wind", "Enhanced wind calc: current=%.1f m/s, target=%.1f m/s, change=%.3f, von_karman=%.3f, thermal=%.3f, final=%.1f m/s", 
+                     current, target, change, von_karman_turb, thermal_contribution, new_speed);
           }
           
-          float micro_turb = ((esp_random() % 200) - 100) / 100.0f * turb_intensity;
+          // Additional debug when stuck at limits
+          if (new_speed >= 10.5f || new_speed <= 0.3f) {
+            ESP_LOGW("wind", "Wind near limit! current=%.1f, target=%.1f, change=%.3f, von_karman=%.3f, thermal=%.3f, final=%.1f", 
+                     current, target, change, von_karman_turb, thermal_contribution, new_speed);
+          }
           
-          id(current_wind_speed) = current + change + micro_turb;
+          // More realistic target change behavior with improved scaling
+          float change_threshold = 0.5f + (current / 20.0f); // Smaller threshold to prevent overshooting
+          float close_change_chance = 30.0f;  // Reduced from 35%
+          float far_change_chance = 6.0f;     // Reduced from 8%
           
-          // Clamp to reasonable bounds (0-25 mph range)
-          id(current_wind_speed) = fmax(0.5f, fmin(25.0f, id(current_wind_speed)));
-          
-          // Phase-specific target change behavior
-          float change_threshold = 2.0f;
-          float close_change_chance = 40.0f;  // Base chance when close
-          float far_change_chance = 10.0f;    // Base chance when far
-          
-          if (id(current_weather_phase) == 0) {        // Quiet - less frequent changes
-            close_change_chance = 25.0f;
-            far_change_chance = 5.0f;
-            change_threshold = 1.5f;
-          } else if (id(current_weather_phase) == 2) { // High - more frequent changes
-            close_change_chance = 60.0f;
-            far_change_chance = 20.0f;
-            change_threshold = 3.0f;
+          if (id(current_weather_phase) == 0) {        // Quiet - very stable
+            close_change_chance = 15.0f;
+            far_change_chance = 2.0f;
+            change_threshold = 0.8f;
+          } else if (id(current_weather_phase) == 2) { // High - dynamic changes
+            close_change_chance = 45.0f;
+            far_change_chance = 12.0f;
+            change_threshold = 1.5f;  // Reduced from 2.5
           }
           
           if (abs(difference) < change_threshold) {
@@ -864,12 +1300,29 @@ script:
             final_wind *= id(gust_intensity);
           }
           
+          // Apply thermal bubble effect (additive vertical gusts)
+          final_wind += thermal_contribution;
+          
+          // Ensure continuous variation - never allow completely static wind
+          static float continuity_phase = 0.0f;
+          continuity_phase += 0.1f;
+          if (continuity_phase > 6.28318f) continuity_phase -= 6.28318f;
+          
+          float continuity_variation = sin(continuity_phase) * 0.05f + cos(continuity_phase * 1.3f) * 0.03f;
+          final_wind += continuity_variation;
+          
+          // Final bounds check
+          final_wind = fmax(0.3f, fmin(11.0f, final_wind));
+          
+          // Wind speed is already in m/s, publish directly
           id(wind_speed_sensor).publish_state(final_wind);
           
-          // Convert wind speed (mph) to fan percentage
-          // Wind range: 0-25 mph maps to 10-90% fan speed
-          float fan_percent = 10.0f + ((final_wind / 25.0f) * 80.0f);
-          fan_percent = fmax(10.0f, fmin(90.0f, fan_percent));
+          // Convert wind speed (m/s) to fan percentage with natural curve
+          // Use logarithmic scaling for more realistic wind sensation
+          float wind_ratio = final_wind / 11.0f; // 25 mph -> 11 m/s
+          float curved_ratio = sqrt(wind_ratio); // Square root for more natural feel
+          float fan_percent = 12.0f + (curved_ratio * 78.0f);
+          fan_percent = fmax(12.0f, fmin(90.0f, fan_percent));
           
           id(apply_fan_speed).execute(fan_percent);
 
@@ -896,20 +1349,22 @@ script:
               float progress = gust_age / id(gust_duration);
               float envelope;
               
-              if (progress < 0.3f) {
-                // Quick build-up (0-30% of duration)
-                envelope = progress / 0.3f;
-                envelope = 1.0f - pow(1.0f - envelope, 2.0f); // Ease-out curve
-              } else if (progress < 0.7f) {
-                // Sustain with slight variation (30-70% of duration)
+              // More natural gust envelope with realistic wind behavior
+              if (progress < 0.25f) {
+                // Natural build-up (0-25% of duration) - wind takes time to accelerate
+                envelope = progress / 0.25f;
+                envelope = 1.0f - pow(1.0f - envelope, 1.8f); // Smoother acceleration
+              } else if (progress < 0.65f) {
+                // Peak sustain with natural fluctuation (25-65% of duration)
                 envelope = 1.0f;
-                // Add some random variation during sustain
-                float variation = sin(gust_age * 2.0f) * 0.1f * ((esp_random() % 100) / 100.0f);
+                // Natural wind oscillation during peak
+                float osc_freq = 1.5f + (id(current_weather_phase) * 0.5f);
+                float variation = sin(gust_age * osc_freq) * 0.08f + cos(gust_age * osc_freq * 1.3f) * 0.05f;
                 envelope += variation;
               } else {
-                // Decay (70-100% of duration)
-                float decay_progress = (progress - 0.7f) / 0.3f;
-                envelope = 1.0f - (decay_progress * decay_progress);
+                // Natural decay (65-100% of duration) - wind gradually dies down
+                float decay_progress = (progress - 0.65f) / 0.35f;
+                envelope = 1.0f - pow(decay_progress, 1.5f); // Smoother decay
               }
               
               id(gust_intensity) = 1.0f + (id(location_gust_strength) - 1.0f) * envelope;
@@ -927,12 +1382,15 @@ script:
           float user_freq = id(gust_frequency).state / 100.0f;
           float phase_multiplier;
           
-          if (id(current_weather_phase) == 0) {        // Quiet phase - fewer but still possible gusts
-            phase_multiplier = 0.4f;
-          } else if (id(current_weather_phase) == 2) { // High phase - frequent gusts
-            phase_multiplier = 2.5f;
-          } else {                                     // Medium phase - normal gusts
-            phase_multiplier = 1.0f;
+          // Wind speed affects gust probability (higher speeds = more likely gusts)
+          float wind_speed_factor = 1.0f + (id(current_wind_speed) / 8.9f) * 0.5f; // 20 mph -> 8.9 m/s
+          
+          if (id(current_weather_phase) == 0) {        // Quiet phase - rare, gentle gusts
+            phase_multiplier = 0.3f * wind_speed_factor;
+          } else if (id(current_weather_phase) == 2) { // High phase - frequent, dynamic gusts
+            phase_multiplier = 2.2f * wind_speed_factor;
+          } else {                                     // Medium phase - moderate gusts
+            phase_multiplier = 0.9f * wind_speed_factor;
           }
           
           float final_prob = base_prob * user_freq * phase_multiplier;
@@ -948,15 +1406,18 @@ script:
             // Phase-specific gust duration and intensity
             float duration_base, intensity_base;
             
-            if (id(current_weather_phase) == 0) {        // Quiet phase
-              duration_base = 2.0f + ((esp_random() % 100) / 100.0f) * 4.0f; // 2-6s
-              intensity_base = 1.1f + ((esp_random() % 100) / 100.0f) * 0.4f; // 1.1-1.5x
-            } else if (id(current_weather_phase) == 2) { // High phase
-              duration_base = 1.0f + ((esp_random() % 100) / 100.0f) * 3.0f; // 1-4s
-              intensity_base = 1.4f + ((esp_random() % 100) / 100.0f) * 1.0f; // 1.4-2.4x
-            } else {                                     // Medium phase
-              duration_base = 1.5f + ((esp_random() % 100) / 100.0f) * 5.0f; // 1.5-6.5s
-              intensity_base = 1.2f + ((esp_random() % 100) / 100.0f) * 0.6f; // 1.2-1.8x
+            // More natural gust characteristics based on base wind speed
+            float speed_factor = id(current_wind_speed) / 6.7f; // 15 mph -> 6.7 m/s
+            
+            if (id(current_weather_phase) == 0) {        // Quiet phase - gentle, longer gusts
+              duration_base = 3.0f + ((esp_random() % 100) / 100.0f) * 5.0f; // 3-8s
+              intensity_base = 1.08f + ((esp_random() % 100) / 100.0f) * 0.25f; // 1.08-1.33x
+            } else if (id(current_weather_phase) == 2) { // High phase - sharp, varied gusts
+              duration_base = 0.8f + ((esp_random() % 100) / 100.0f) * 2.5f; // 0.8-3.3s
+              intensity_base = 1.3f + ((esp_random() % 100) / 100.0f) * 0.9f * (1.0f + speed_factor * 0.3f); // Dynamic intensity
+            } else {                                     // Medium phase - balanced gusts
+              duration_base = 1.8f + ((esp_random() % 100) / 100.0f) * 4.0f; // 1.8-5.8s
+              intensity_base = 1.15f + ((esp_random() % 100) / 100.0f) * 0.5f * (1.0f + speed_factor * 0.2f); // Speed-dependent
             }
             
             id(gust_duration) = duration_base;
@@ -993,6 +1454,17 @@ script:
           then:
             - script.execute: check_for_gusts
             - delay: !lambda 'return 200 + (esp_random() % 600);' # 200-800ms random
+
+  # Thermal bubble check loop
+  - id: thermal_bubble_loop
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return id(wind_simulation_active);'
+          then:
+            - script.execute: check_thermal_bubbles
+            - delay: !lambda 'return 1000 + (esp_random() % 2000);' # 1-3s random
 
   # External sensor loop
   - id: external_sensor_loop
