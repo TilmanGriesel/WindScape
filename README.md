@@ -27,23 +27,23 @@ WindScape delivers authentic, location‑inspired airflow, from a gentle Mediter
 
 ## Features
 
-* **Dynamic Wind‑Simulation Engine**
-  Smooth, randomized airflow with realistic transitions between quiet, moderate, and high‑activity “weather” phases.
+* **Realistic Wind Physics**
+  Smart turbulence modeling and thermal effects that create natural-feeling wind patterns, just like you'd experience outdoors.
 
-* **Six Location Presets**
-  Pre‑tuned profiles that capture the feel of coastal, mountain, rural, and other outdoor environments.
+* **Nature-Inspired Environment Presets**
+  Five carefully crafted profiles that capture the feel of different outdoor locations – from gentle countryside breezes to powerful ocean winds.
 
-* **Manual or Automated Speed Control**
-  Adjust fan speed directly or let automations handle it.
+* **Steady or Dynamic Modes**
+  Choose between constant airflow or ever-changing wind patterns that respond naturally to the environment you select.
 
-* **External Wind‑Sensor Support**
-  Reacts to live telemetry (e.g. racing‑sim car speed over MQTT) and safely reverts to the last preset if the sensor falls silent.
+* **External Sensor Support**
+  Connect live data feeds (like racing sim speed) and WindScape will automatically adjust airflow in real-time, with smart fallback when the signal drops.
 
 * **Home Assistant Integration**
   Control, monitor, and automate entirely over Wi‑Fi.
 
-* **Real‑Time RPM Monitoring**
-  Optional tachometer feedback for diagnostics.
+* **Comprehensive Real-Time Monitoring**
+  Deep insight into the simulation engine – weather phases, thermal events, turbulence levels, target tracking, and all physics calculations exposed as sensors.
 
 * **OTA Firmware Updates**
   Built on ESPHome for one‑click wireless upgrades.
@@ -301,6 +301,61 @@ _Thanks and credit to @mwood77_
 | **Wind Mode**        | 6 presets + Manual | Select ambience           |
 | **Restart**          | —                  | Reboot ESP32              |
 
+**Advanced Tuning Parameters** (for power users via config):
+- Turbulence Detail Level: 30m (how fine-grained the wind texture is)
+- Turbulence Strength: 0.3 (how pronounced the micro-variations are)  
+- Thermal Event Rate: 0.025Hz (how often warm air bubbles occur)
+- Thermal Intensity: 1.8× (how strong thermal effects feel)
+- Thermal Coverage: 15m (how wide the thermal influence spreads)
+
+---
+
+## Monitoring & Sensors
+
+WindScape exposes comprehensive real-time data about the wind simulation engine:
+
+### **Core Wind Metrics**
+| Sensor | Unit | Description |
+|--------|------|-------------|
+| **Wind Speed** | m/s | Current output wind speed |
+| **Target Wind Speed** | m/s | Where the simulation is heading |
+| **Wind Change Rate** | m/s² | How fast wind is accelerating/decelerating |
+| **Fan RPM** | RPM | Actual fan rotation speed |
+
+### **Weather System Status**
+| Sensor | Type | Description |
+|--------|------|-------------|
+| **Current Weather Phase** | 0-2 | Quiet (0), Medium (1), High (2) activity |
+| **Weather Phase Description** | Text | Human-readable phase status |
+| **Phase Duration Remaining** | seconds | Time until next phase change |
+
+### **Physics Engine Monitoring**
+| Sensor | Unit | Description |
+|--------|------|-------------|
+| **Turbulence Energy** | J | Von Kármán spectral energy level |
+| **Spectral Energy Buffer** | m/s | Real-time turbulence contribution |
+| **Gust Active** | % | Current gust progression (0-100%) |
+| **Gust Intensity** | × | Active gust strength multiplier |
+| **Thermal Bubble Active** | % | Thermal event progression (0-100%) |
+| **Current Thermal Contribution** | m/s | Thermal effect on wind speed |
+
+### **System Status Indicators**
+| Sensor | Type | Description |
+|--------|------|-------------|
+| **Wind Simulation Active** | Binary | Physics engine running status |
+| **Gust Currently Active** | Binary | Gust event in progress |
+| **Thermal Bubble Active** | Binary | Thermal event in progress |
+| **External Sensor Mode** | Binary | Using external data feed |
+| **Wind Speed Converging** | Binary | Current speed near target |
+| **Simulation Status** | Text | Overall engine activity summary |
+| **Physics Debug Info** | Text | Technical diagnostic data |
+
+These sensors enable:
+- **Real-time dashboards** showing wind physics in action
+- **Advanced automations** based on weather phases or thermal events  
+- **Performance monitoring** and troubleshooting
+- **Educational visualization** of atmospheric modeling
+
 ---
 
 ## Troubleshooting
@@ -325,7 +380,21 @@ _Thanks and credit to @mwood77_
 
 ## Technical Notes
 
-WindScape layers multiple randomised systems (phase engine, micro‑turbulence, gusts) to avoid predictable sine‑wave patterns and ensure continuous, organic motion. All timings are jittered; phase progression is probability‑based; and user intensity scaling is applied last.
+**How the Wind Physics Work:**
+WindScape creates realistic wind by combining several clever techniques:
+
+* **Turbulence Modeling** - Uses proven atmospheric science to generate the micro-variations that make wind feel natural instead of robotic
+* **Thermal Effects** - Simulates warm air rising (like over hot pavement) that creates those gentle gusts you feel in real life
+* **Weather Moods** - Automatically shifts between calm, moderate, and active periods, just like real weather patterns
+* **Smart Gusting** - Adds realistic wind bursts that build up naturally, peak, and fade away organically
+* **Smooth Transitions** - Prevents jarring speed changes by using physics-based momentum
+
+**Behind the Scenes:**
+- Updates 5 times per second with intelligent randomization
+- Tracks multiple wind frequencies simultaneously for authentic texture
+- Models thermal events that happen every few seconds to minutes
+- Adapts intensity based on the current weather "mood"
+- Uses logarithmic scaling so fan speed changes feel natural to humans
 
 ---
 
@@ -337,7 +406,20 @@ WindScape layers multiple randomised systems (phase engine, micro‑turbulence, 
 
 ## How WindScape Works
 
-WindScape cycles through **Quiet**, **Medium**, and **High‑Activity** weather phases, each with its own speed ranges and gust probabilities. A dynamic target algorithm steers the fan toward randomly selected speeds within those ranges, while micro‑turbulence and gust overlays add texture. External sensor mode bypasses the simulation and maps real‑time data directly to fan speed, with automatic safety fallback.
+**The Wind Simulation System:**
+WindScape layers multiple systems to create convincing natural wind:
+
+1. **Micro-Turbulence** - Constantly adds tiny speed variations (like leaves rustling) by mixing different "frequencies" of wind movement together
+
+2. **Thermal Bubbles** - Occasionally creates rising warm air effects that start gentle, build to a peak, then fade away naturally over 8-15 seconds
+
+3. **Weather Moods** - Automatically cycles between calm periods (1.5-3.5 min), normal activity (2-5 min), and windy periods (1-2.5 min) with natural transitions
+
+4. **Realistic Movement** - All speed changes use momentum and inertia, so the fan never makes sudden jarring jumps
+
+5. **Multiple Time Scales** - Fast micro-changes (5x/sec), medium gusts (seconds), and slow mood shifts (minutes) all work together
+
+**External Sensor Mode** skips all the simulation and directly maps your data (like car speed) to fan speed, with a 60-second safety timeout that switches back to your last preset if the signal is lost.
 
 ---
 
